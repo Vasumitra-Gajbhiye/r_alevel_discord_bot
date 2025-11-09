@@ -271,7 +271,6 @@ const {
 } = require("discord.js");
 
 
-const { token } = require("./config.json");
 
 // Role IDs
 const ROLE_ADMIN = "1114451108811767928";
@@ -481,4 +480,4 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 // Login
-client.login(token);
+client.login(process.env.token);
