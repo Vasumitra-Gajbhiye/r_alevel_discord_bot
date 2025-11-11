@@ -251,233 +251,268 @@
  * Discord Reputation System Bot
  * Cleaned + Commented Version (Functionality unchanged)
  */
+// ------------------------
+// MessageCreate — Reputation Logic (deduped)
+// ------------------------
 require("dotenv").config();
 const fs = require("node:fs");
 const path = require("node:path");
-const RepBan = require("./models/repban.js");
 
-// Connect to MongoDB
+// DB
 const connectDB = require("./database.js");
+const Reputation = require("./models/reputation.js");
+const RepBan = require("./models/repban.js");
 connectDB();
 
-const Reputation = require("./models/reputation.js"); // MongoDB reputation model
-
+// Discord
 const {
   Client,
   Collection,
   Events,
   GatewayIntentBits,
   ActivityType,
+  PermissionsBitField,
 } = require("discord.js");
 
+// ------------------------
+// Constants / Config
+// ------------------------
+const BOT_ID = "1127197280651464714";
 
-
-// Role IDs
-const ROLE_ADMIN = "1114451108811767928";
+// Role IDs (tiers)
 const ROLE_BEGINNER = "1114823569864663092";
 const ROLE_INTERMEDIATE = "1114823925935902770";
 const ROLE_ADVANCED = "1114823886438154240";
 const ROLE_EXPERT = "1114823572096045118";
 const ROLE_GIGACHAD = "1114823933674410034";
 
-const BOT_ID = "1127197280651464714";
+// Thank/Welcome keyword sets (strict, whole-word)
+const THANK_WORDS = ["ty", "thank", "thanks", "thx", "thnx"];
+const WELCOME_WORDS = ["yw", "welcome", "np", "noworries", "noproblem"];
 
-// Create Client
+// Processed message cache to prevent duplicate sends in weird edge cases
+// (e.g., host restarting event loop, partial replays, accidental double handling).
+// Keys are Discord message IDs.
+const processedMessageIds = new Set();
+
+// ------------------------
+// Client
+// ------------------------
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
   ],
 });
 
+// ------------------------
 // Load Slash Commands
+// ------------------------
 client.commands = new Collection();
 const commandsFolder = path.join(__dirname, "commands");
 
-for (const folder of fs.readdirSync(commandsFolder)) {
-  const folderPath = path.join(commandsFolder, folder);
-  const commandFiles = fs.readdirSync(folderPath).filter((file) => file.endsWith(".js"));
-
-  for (const file of commandFiles) {
-    const filePath = path.join(folderPath, file);
-    const command = require(filePath);
-
-    if ("data" in command && "execute" in command) {
-      client.commands.set(command.data.name, command);
-    } else {
-      console.warn(`[WARN] ${filePath} is missing "data" or "execute"`);
+if (fs.existsSync(commandsFolder)) {
+  for (const folder of fs.readdirSync(commandsFolder)) {
+    const folderPath = path.join(commandsFolder, folder);
+    if (!fs.statSync(folderPath).isDirectory()) continue;
+    const commandFiles = fs.readdirSync(folderPath).filter((f) => f.endsWith(".js"));
+    for (const file of commandFiles) {
+      const filePath = path.join(folderPath, file);
+      const cmd = require(filePath);
+      if ("data" in cmd && "execute" in cmd) client.commands.set(cmd.data.name, cmd);
+      else console.warn(`[WARN] ${filePath} missing "data" or "execute".`);
     }
   }
 }
 
-// Bot Ready
-client.once(Events.ClientReady, () => {
-  console.log("✅ Bot Online!");
-  client.user.setActivity({
-    name: "Helping r/Alevel study",
-    type: ActivityType.Watching,
-  });
-});
+// ------------------------
+// Helpers
+// ------------------------
 
-function containsWord(message, wordList) {
-  return wordList.some(word => 
-    new RegExp(`\\b${word}\\b`, "i").test(message)
-  );
+// Whole-word detection (no substring false positives)
+function hasAnyWholeWord(message, dictionary) {
+  const tokens = message.toLowerCase().split(/\s+/).filter(Boolean);
+  return tokens.some((t) => dictionary.includes(t));
 }
 
-// Reputation Keywords
-const THANK_WORDS = ["ty", "thank", "thnx", "thx", "thn"];
-const WELCOME_WORDS = ["yw", "welcome", "no worries", "nw", "no problem", "np"];
-
-/** Fetch or Create Reputation Record */
+// Get or create reputation record
 async function getRepRecord(userId) {
-  let rep = await Reputation.findOne({ userId });
-  if (!rep) rep = await Reputation.create({ userId, rep: 0 });
-  return rep;
+  let doc = await Reputation.findOne({ userId });
+  if (!doc) doc = await Reputation.create({ userId, rep: 0 });
+  return doc;
 }
 
-/** Add +1 Reputation */
+// Add +1 reputation (returns new rep or null if banned)
 async function addReputation(userId) {
-  // ⛔ Stop if banned
   const isBanned = await RepBan.findOne({ userId });
-  if (isBanned) return null; // return null so we can detect no rep change
-
-  const rep = await getRepRecord(userId);
-  rep.rep += 1;
-  await rep.save();
-  return rep.rep;
+  if (isBanned) return null;
+  const rec = await getRepRecord(userId);
+  rec.rep += 1;
+  await rec.save();
+  return rec.rep;
 }
 
-// /** Set Reputation (Admin Command) */
-// async function setReputation(userId, value) {
-//   const rep = await getRepRecord(userId);
-//   rep.rep = value;
-//   await rep.save();
-//   return rep.rep;
-// }
-/** Assign Roles Based On Reputation (MongoDB + Role IDs) */
-async function assignRepRole(message, member, isAuthor = false) {
+// Role tier table (highest to lowest)
+const TIERS = [
+  { amount: 1000, role: ROLE_GIGACHAD, label: "Giga Chad (1000+ Rep)" },
+  { amount: 500, role: ROLE_EXPERT, label: "Expert (500+ Rep)" },
+  { amount: 100, role: ROLE_ADVANCED, label: "Advanced (100+ Rep)" },
+  { amount: 50, role: ROLE_INTERMEDIATE, label: "Intermediate (50+ Rep)" },
+  { amount: 10, role: ROLE_BEGINNER, label: "Beginner (10+ Rep)" },
+];
+const ALL_TIER_IDS = TIERS.map((t) => t.role);
+
+// Assign the correct rep role, only announce when the tier actually changes
+async function assignRepRole(message, member) {
   try {
-    const guild = message.guild;
-    if (!guild) return;
+    if (!member || !message.guild) return;
 
-    const target = isAuthor ? message.member : await guild.members.fetch(member.id).catch(() => null);
-    if (!target) return;
+    // Respect repban
+    const banned = await RepBan.findOne({ userId: member.id });
+    if (banned) return;
 
-    // 🚫 STOP if rep-banned
-    const isBanned = await RepBan.findOne({ userId: target.id });
-    if (isBanned) return;
-
-    const rep = (await getRepRecord(target.id)).rep ?? 0;
-
-    const ROLE_TIERS = [
-      { amount: 1000, role: ROLE_GIGACHAD, label: "Giga Chad (1000+ Rep)" },
-      { amount: 500,  role: ROLE_EXPERT, label: "Expert (500+ Rep)" },
-      { amount: 100,  role: ROLE_ADVANCED, label: "Advanced (100+ Rep)" },
-      { amount: 50,   role: ROLE_INTERMEDIATE, label: "Intermediate (50+ Rep)" },
-      { amount: 10,   role: ROLE_BEGINNER, label: "Beginner (10+ Rep)" },
-    ];
-
-    const eligibleTier = ROLE_TIERS.find(t => rep >= t.amount);
-
-    // If no eligible rank (rep < 10), just remove all tier roles and exit.
-    if (!eligibleTier) {
-      await target.roles.remove(ROLE_TIERS.map(t => t.role)).catch(() => {});
+    // Permissions check
+    const me = message.guild.members.me;
+    if (!me || !me.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+      console.warn("[assignRepRole] Missing Manage Roles permission.");
       return;
     }
 
-    // ✅ If already has the correct role, just ensure others are removed.
-    if (target.roles.cache.has(eligibleTier.role)) {
-      const rolesToRemove = ROLE_TIERS
-        .filter(t => t.role !== eligibleTier.role)
-        .map(t => t.role);
+    // Current rep & eligible tier
+    const rep = (await getRepRecord(member.id)).rep ?? 0;
+    const eligible = TIERS.find((t) => rep >= t.amount);
 
-      await target.roles.remove(rolesToRemove).catch(() => {});
-      return; // No announcement, no spam ✅
+    // If no tier applies, remove any tier roles and exit (no announcement)
+    if (!eligible) {
+      await member.roles.remove(ALL_TIER_IDS).catch(() => {});
+      return;
     }
 
-    // ✅ Otherwise: remove all tier roles THEN add new one
-    await target.roles.remove(ROLE_TIERS.map(t => t.role)).catch(() => {});
-    await target.roles.add(eligibleTier.role).catch(() => {});
+    const hasCorrect = member.roles.cache.has(eligible.role);
 
-    // 🎉 Only send message on actual new rank
+    // Remove only wrong tier roles (keep the correct one if present)
+    const toRemove = ALL_TIER_IDS.filter((id) => id !== eligible.role);
+    if (toRemove.length) {
+      await member.roles.remove(toRemove).catch(() => {});
+    }
+
+    // If already has correct role — do nothing more (no spam)
+    if (hasCorrect) return;
+
+    // Add correct role and announce
+    await member.roles.add(eligible.role).catch(() => {});
     await message.channel.send(
-      `🎉 Congratulations, ${target} has received the **${eligibleTier.label}** role!`
+      `🎉 Congratulations, ${member} has received the **${eligible.label}** role!`
     );
-
   } catch (err) {
     console.error("[assignRepRole] Error:", err);
   }
 }
 
-
-// Message Listener
-client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot || message.author.id === BOT_ID) return;
-
-  const content = message.content.toLowerCase();
-  const prefix = "!";
-
-  // Admin manual rep set
-  if (content.startsWith(prefix)) {
-    const args = content.slice(prefix.length).trim().split(/ +/);
-    const command = args.shift();
-
-    if (command === "rep") {
-      if (!message.member.roles.cache.has(ROLE_ADMIN)) return;
-
-      const user = message.mentions.users.first();
-      const amount = parseInt(args[1]);
-      if (!user || isNaN(amount)) return message.channel.send("Usage: `!rep @user <value>`");
-
-      const newRep = await setReputation(user.id, amount);
-      return message.channel.send(`✅ Set ${user}'s rep to **${newRep}**`);
-    }
-  }
-
-  // "You're welcome" → Give rep to responder
-if (containsWord(content, WELCOME_WORDS)) {
-  try {
-    const replied = await message.fetchReference();
-    if (THANK_WORDS.some((t) => replied.content.toLowerCase().includes(t))) return;
-
-    const newRep = await addReputation(message.author.id);
-    if (newRep === null) return; // ⛔ banned: do not announce, do not assign role
-
-    await assignRepRole(message, message.member, true);
-    return message.channel.send(`+1 Rep → ${message.author} (**${newRep}**)`);
-  } catch {}
-}
-
- // "Thank you" → Give rep to mentioned users
-if (containsWord(content, THANK_WORDS)) {
-  message.mentions.members?.forEach(async (member) => {
-    if (!member || member.id === BOT_ID || member.id === message.author.id) return;
-
-    const rep = await addReputation(member.id);
-    if (rep === null) return; // ⛔ banned: don't show message or assign role
-
-    await assignRepRole(message, member, false);
-    message.channel.send(`+1 Rep → ${member} (**${rep}**)`);
-  });
-}
+// ------------------------
+// Ready
+// ------------------------
+client.once(Events.ClientReady, () => {
+  console.log("✅ Bot Online!");
+  client.user.setActivity({ name: "Helping r/Alevel study", type: ActivityType.Watching });
 });
 
-// Slash Commands Handler
+// ------------------------
+// MessageCreate — Reputation Logic
+// ------------------------
+client.on(Events.MessageCreate, async (message) => {
+  try {
+    if (!message.guild) return;
+    if (message.author.bot || message.author.id === BOT_ID) return;
+
+    const content = message.content.toLowerCase();
+
+    // 🔒 Idempotency: ensure we only process each message once
+    if (processedMessageIds.has(message.id)) return;
+    // We'll add to the set only when we actually award rep (not for every message)
+
+    // CASE A: Reply saying THANK* → give +1 rep to the author of the replied message
+    if (message.reference && hasAnyWholeWord(content, THANK_WORDS)) {
+      const replied = await message.fetchReference().catch(() => null);
+      const target = replied?.member;
+      if (!target) return;
+      if (target.id === message.author.id) return; // no self-award
+
+      const newRep = await addReputation(target.id);
+      if (newRep === null) return; // rep-banned
+
+      processedMessageIds.add(message.id); // prevent any duplicate sends for this message
+      await assignRepRole(message, target);
+      return void message.channel.send(`+1 Rep → ${target} (**${newRep}**)`);
+    }
+
+    // CASE B: Non-reply THANK* with mentions → give +1 rep to each unique mentioned member
+    if (!message.reference && hasAnyWholeWord(content, THANK_WORDS) && message.mentions?.members?.size) {
+      const processed = new Set();
+      let someoneAwarded = false;
+
+      for (const member of message.mentions.members.values()) {
+        if (!member) continue;
+        if (member.id === message.author.id) continue; // no self-award
+        if (member.id === BOT_ID) continue;
+        if (processed.has(member.id)) continue;
+
+        const newRep = await addReputation(member.id);
+        if (newRep === null) continue; // rep-banned
+
+        someoneAwarded = true;
+        processed.add(member.id);
+        await assignRepRole(message, member);
+        await message.channel.send(`+1 Rep → ${member} (**${newRep}**)`);
+      }
+
+      if (someoneAwarded) processedMessageIds.add(message.id);
+      return;
+    }
+
+    // CASE C: Reply "welcome/yw/np" directly to a THANK* message → give +1 rep to the responder
+    if (message.reference && hasAnyWholeWord(content, WELCOME_WORDS)) {
+      const replied = await message.fetchReference().catch(() => null);
+      if (!replied) return;
+
+      // Only count if the replied message is actually a THANK message (whole-word check)
+      if (!hasAnyWholeWord(replied.content.toLowerCase(), THANK_WORDS)) return;
+
+      const newRep = await addReputation(message.author.id);
+      if (newRep === null) return; // rep-banned
+
+      processedMessageIds.add(message.id);
+      await assignRepRole(message, message.member);
+      return void message.channel.send(`+1 Rep → ${message.author} (**${newRep}**)`);
+    }
+
+    // Nothing to do for other messages
+  } catch (err) {
+    console.error("[MessageCreate] Error:", err);
+  }
+});
+
+// ------------------------
+// Slash Commands
+// ------------------------
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
-
   try {
     await command.execute(interaction);
   } catch (err) {
     console.error(err);
-    await interaction.reply({ content: "⚠️ Error executing command.", ephemeral: true });
+    // Use defer + edit in your command handlers if they do long work
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: "⚠️ Error executing command.", ephemeral: true });
+    }
   }
 });
 
+// ------------------------
 // Login
-client.login(process.env.token);
+// ------------------------
+client.login(process.env.TOKEN);

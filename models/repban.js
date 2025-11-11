@@ -1,7 +1,11 @@
-const mongoose = require("mongoose");
+const { Schema, model } = require("mongoose");
 
-const repBanSchema = new mongoose.Schema({
-  userId: { type: String, required: true, unique: true }
-});
+const RepBanSchema = new Schema(
+  {
+    userId: { type: String, required: true, index: true, unique: true },
+    reason: { type: String },
+  },
+  { timestamps: true }
+);
 
-module.exports = mongoose.model("RepBan", repBanSchema);
+module.exports = model("RepBan", RepBanSchema);

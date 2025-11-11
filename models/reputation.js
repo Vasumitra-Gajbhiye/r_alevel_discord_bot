@@ -1,8 +1,11 @@
-const mongoose = require("mongoose");
+const { Schema, model } = require("mongoose");
 
-const reputationSchema = new mongoose.Schema({
-  userId: { type: String, required: true, unique: true },
-  rep: { type: Number, default: 0 }
-});
+const ReputationSchema = new Schema(
+  {
+    userId: { type: String, required: true, index: true, unique: true },
+    rep: { type: Number, required: true, default: 0 },
+  },
+  { timestamps: true }
+);
 
-module.exports = mongoose.model("Reputation", reputationSchema);
+module.exports = model("Reputation", ReputationSchema);
