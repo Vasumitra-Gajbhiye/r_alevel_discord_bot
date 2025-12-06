@@ -126,7 +126,7 @@ const CERT_UPDATES_CHANNEL = process.env.REVIEW_CHANNEL; // Public certificate u
         return interaction.editReply({ content: "❌ Application not found in database." });
       }
 
-      if (app.status !== "details_submitted") {
+      if (app.status !== "details submitted") {
         return interaction.editReply({ content: "⚠️ Certificate must have details submitted before delivery." });
       }
 
