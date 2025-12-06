@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const ModLog = require("../../models/modlog.js");
 const generateActionId = require("../../utils/generateId.js");
 
@@ -15,7 +15,7 @@ module.exports = {
             option.setName("reason")
                 .setDescription("Reason for ban")
                 .setRequired(true)
-        ),
+        ).setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
     async execute(interaction) {
         const modRoles = process.env.MOD_ROLES.split(",");

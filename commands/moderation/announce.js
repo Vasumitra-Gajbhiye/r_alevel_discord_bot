@@ -118,10 +118,15 @@ module.exports = {
         // ------------------------------
         // BUILD ANNOUNCEMENT EMBED
         // ------------------------------
+
+        let formattedDescription = description
+    .replace(/\\n/g, "\n")   // Converts literal "\n"
+    .trim();
+
         const embed = new EmbedBuilder()
             .setColor(color)
             .setTitle(`📢 ${title}`)
-            .setDescription(description)
+            .setDescription(formattedDescription)
             .setFooter({ text: "Official r/alevel Announcement" })
             .setTimestamp();
 

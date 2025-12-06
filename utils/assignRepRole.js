@@ -1,12 +1,5 @@
 // utils/assignRepRole.js
 const Reputation = require("../models/reputation.js");
-const {
-  ROLE_BEGINNER,
-  ROLE_INTERMEDIATE,
-  ROLE_ADVANCED,
-  ROLE_EXPERT,
-  ROLE_GIGACHAD,
-} = require("./roles");
 
 /**
  * Recalculate and assign the correct rep tier role to a user, by ID.
@@ -34,11 +27,11 @@ async function assignRepRoleById(guild, channel, userId) {
 
     // Define tiers (highest → lowest)
     const TIERS = [
-      { amount: 1000, role: ROLE_GIGACHAD,     label: "Giga Chad (1000+ Rep)" },
-      { amount: 500,  role: ROLE_EXPERT,       label: "Expert (500+ Rep)" },
-      { amount: 100,  role: ROLE_ADVANCED,     label: "Advance (100+ Rep)" },
-      { amount: 50,   role: ROLE_INTERMEDIATE, label: "Intermediate (50+ Rep)" },
-      { amount: 10,   role: ROLE_BEGINNER,     label: "Beginner (10+ Rep)" },
+      { amount: 1000, role: process.env.ROLE_GIGACHAD,     label: "Giga Chad (1000+ Rep)" },
+      { amount: 500,  role: process.env.ROLE_EXPERT,       label: "Expert (500+ Rep)" },
+      { amount: 100,  role: process.env.ROLE_ADVANCED,     label: "Advance (100+ Rep)" },
+      { amount: 50,   role: process.env.ROLE_INTERMEDIATE, label: "Intermediate (50+ Rep)" },
+      { amount: 10,   role: process.env.ROLE_BEGINNER,     label: "Beginner (10+ Rep)" },
     ];
 
     // Compute correct tier

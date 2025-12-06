@@ -1,7 +1,8 @@
 const { SlashCommandBuilder } = require("discord.js");
 const Reputation = require("../../models/reputation.js");
-const { ROLE_ADMIN } = require("../../utils/roles");
 const { assignRepRoleById } = require("../../utils/assignRepRole");
+require("dotenv").config();
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,7 +20,7 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    if (!interaction.member.roles.cache.has(ROLE_ADMIN)) {
+    if (!interaction.member.roles.cache.has(process.env.ADMIN_ROLE_ID)) {
       return interaction.reply({ content: "❌ You do not have permission.", ephemeral: true });
     }
 
