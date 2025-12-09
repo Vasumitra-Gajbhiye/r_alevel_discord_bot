@@ -8,19 +8,80 @@ const RepBan = require("../models/repban.js");
 const { PermissionsBitField, Events } = require("discord.js");
 
 // Words
-const THANK_WORDS = ["ty", "thank", "thanks", "thx", "thnx"];
+const THANK_WORDS = ["thanks!!",
+  "thank you",
+  "thank u",
+  "thankuu",
+  "thankuuu",
+  "thankyou",
+  "thanks",
+  "thanks!",
+  "thankss",
+  "thankss!",
+  "thankss!!",
+  "thanksss",
+  "ty",
+  "tysm",
+  "tyvm",
+  "thx",
+  "thanx",
+  "thnx",
+  "tnx",
+  "tnx!",
+  "thnk u",
+  "thank you very much",
+  "thank you so much",
+  "thanks a lot",
+  "thanks a ton",
+  "many thanks",
+  "appreciate it",
+  "much appreciated",
+  "really appreciate it",
+  "appreciate ya",
+  "i appreciate it",
+  "tyty",
+  "tytyy",
+  "tyy",
+  "tyuu",
+  "tyssm",
+  "tysmmm",
+  "tysmm",
+  "tysmmm!!!",
+  "thxsm",
+  "ty <3",
+  "tysm <3",
+  "thank yoi",
+  "thank uo",
+  "thakns",
+  "thansk",
+  "tahnks",
+  "tahnx",
+  "tnk u",
+  "tyu",
+  "tyyyy",
+  "tyuy",
+  "ty!!",
+  "tysm!!",
+  "thx!!",
+  "thank you!!!",
+  "tyyy!!!",
+  "ty :D",
+  "tysm :)",
+  "ty <33",
+  "tysmmm <333"
+];
 const WELCOME_WORDS = ["yw", "welcome", "np", "noworries", "noproblem", "nw", "nws"];
 
 // Disabled areas
-const DISABLED_CHANNELS = ["1129785430326394892"];
-const DISABLED_CATEGORIES = ["1330029371934773268"];
+const DISABLED_CHANNELS = process.env.DISABLED_CHANNELS;
+const DISABLED_CATEGORIES = process.env.DISABLED_CATEGORIES;
 
 // Tier roles
-const ROLE_BEGINNER = "1114823569864663092";
-const ROLE_INTERMEDIATE = "1114823925935902770";
-const ROLE_ADVANCED = "1114823886438154240";
-const ROLE_EXPERT = "1243606965482033193";
-const ROLE_GIGACHAD = "1114823933674410034";
+const ROLE_BEGINNER = process.env.ROLE_BEGINNER;
+const ROLE_INTERMEDIATE = process.env.ROLE_INTERMEDIATE;
+const ROLE_ADVANCED = process.env.ROLE_ADVANCED;
+const ROLE_EXPERT = process.env.ROLE_EXPERT;
+const ROLE_GIGACHAD = process.env.ROLE_GIGACHAD;
 
 const TIERS = [
     { amount: 1000, role: ROLE_GIGACHAD, label: "Giga Chad (1000+ Rep)" },
@@ -84,7 +145,15 @@ async function ensureTierRoleAndCheckAdded(guild, member, announceChannel) {
             return false;
         }
 
-        const hadBefore = member.roles.cache.has(eligible.role);
+function getTierByRep(rep) {
+    return TIERS.find(t => rep >= t.amount) || null;
+}
+
+// NEW: get previous tier from rep - 1
+const previousTier = getTierByRep(rep - 1);
+
+// Determine if new tier is different
+const hadBefore = previousTier && previousTier.role === eligible.role;
 
         const toRemove = ALL_TIER_IDS.filter(r => r !== eligible.role);
         await member.roles.remove(toRemove).catch(() => {});
@@ -170,7 +239,7 @@ module.exports = function reputationSystem(client) {
             if (message.reference && hasWholeWord(content, WELCOME_WORDS)) {
                 const replied = await message.fetchReference().catch(() => null);
                 if (!replied) return;
-                if (!hasWholeWord(replied.content?.toLowerCase(), THANK_WORDS)) return;
+                // if (!hasWholeWord(replied.content?.toLowerCase(), THANK_WORDS)) return;
 
                 const newRep = await addReputation(message.author.id);
                 if (newRep === null) return;
