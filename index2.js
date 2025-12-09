@@ -3,6 +3,10 @@ require("dotenv").config();
 const fs = require("node:fs");
 const path = require("node:path");
 
+// task-index.js
+const { EmbedBuilder } = require('discord.js');
+const TaskBoard = require('./models/task.js');
+
 // DB models & connect
 const connectDB = require("./database.js");
 const Reputation = require("./models/reputation.js");
@@ -377,4 +381,5 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 // ---------- LOGIN ----------
+
 client.login(process.env.TOKEN);
