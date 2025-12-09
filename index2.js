@@ -376,5 +376,89 @@ client.on(Events.InteractionCreate, async (interaction) => {
     });
 });
 
+//--------------------------------------------------
+// HANDLE BUTTON CLICKS
+//--------------------------------------------------
+client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isButton()) return;
+
+    const user = interaction.user;
+
+    // Determine certificate type
+    let type;
+    if (interaction.customId === "apply_helper") type = "Helper Certificate";
+    if (interaction.customId === "apply_writer") type = "Writer Certificate";
+    if (interaction.customId === "apply_resource") type = "Resource Contributor Certificate";
+
+    if (!type) return;
+
+    const reviewChannel = client.channels.cache.get("1442441607671451648");
+    if (!reviewChannel) return;
+
+    // 🔥 SAFEST APPROACH: Defer the interaction (ephemeral)
+    await interaction.deferReply({ ephemeral: true });
+
+    // Send application to review channel
+    await reviewChannel.send(
+        `📨 **New Certificate Application**\n` +
+        `👤 User: **${user.tag}** (${user.id})\n` +
+        `📘 Applied For: **${type}**`
+    );
+
+    // Update ephemeral message
+    await interaction.editReply({
+        content: `✅ Your application for **${type}** has been submitted!`
+    });
+});
+
+//--------------------------------------------------
+// SEND TASKBOARD
+//--------------------------------------------------
+module.exports = (client) => {
+    client.on('interactionCreate', async interaction => {
+        if (!interaction.customId.startsWith("createBoard_")) return;
+
+        const [_, team, totalTasks] = interaction.customId.split("_");
+        const count = Number(totalTasks);
+
+        // Collect all task descriptions
+        const tasks = [];
+        for (let i = 1; i <= count; i++) {
+            const desc = interaction.fields.getTextInputValue(`task_${i}`);
+            tasks.push({
+                number: i,
+                description: desc,
+                status: team === 'dev' ? 'Unclaimed' : undefined,
+                deadline: team === 'graphic' ? null : undefined
+            });
+        }
+
+        // Generate board ID
+        const prefix = team === "dev" ? "DEV" : "GFX";
+        const existing = await TaskBoard.countDocuments({ team });
+        const boardId = prefix + (existing + 1);
+
+        // Create board in DB
+        const board = await TaskBoard.create({
+            boardId,
+            team,
+            channelId: interaction.channel.id,
+            messageId: null,
+            tasks
+        });
+
+        // Create embed
+        const embed = new EmbedBuilder()
+            .setTitle(`${team === 'dev' ? 'Developer' : 'Graphic'} Taskboard`)
+            .setDescription(`**Board ID:** ${boardId}\n\n${formatBoard(tasks, team)}`)
+            .setColor('Blue');
+
+        const msg = await interaction.channel.send({ embeds: [embed] });
+
+        board.messageId = msg.id;
+        await board.save();
+})};
+
 // ---------- LOGIN ----------
+
 client.login(process.env.TOKEN);
