@@ -72,7 +72,45 @@ function formatBoard(tasks, team, boardId) {
     return '```txt\n' + rows.join('\n') + '\n```';
 }
 
+function formatStatusTable(tasks, team) {
+    const COL_TASK = 4;      
+    const COL_ASSIGNED = 20;     
+    const COL_STATUS = 12;     
+    const GAP = 2;            
+
+    // header
+    const header = `No. Assigned To${" ".repeat(COL_ASSIGNED - "Assigned To".length)}  Status    `;
+    const border = '-'.repeat(header.length);
+    const rows = [header, border];
+
+    // build rows
+    for (const task of tasks) {
+        // Get assigned to info
+        let assignedTo = '';
+        if (team === 'graphic') {
+            assignedTo = 'GFX Team';
+        } else if (task.status === 'Claimed' && task.claimerName) {
+            assignedTo = task.claimerName;
+        } else if (task.status === 'Completed' && task.claimerName) {
+            assignedTo = task.claimerName;
+        } else {
+            assignedTo = 'Unknown';
+        }
+
+        // First line with task number, assigned to, and status
+        rows.push(
+            task.number.toString().padEnd(COL_TASK) +
+            assignedTo.padEnd(COL_ASSIGNED) +
+            ' '.repeat(GAP) +
+            task.status.padEnd(COL_STATUS)
+        );
+    }
+
+    return '```txt\n' + rows.join('\n') + '\n```';
+}
+
 module.exports = {
     wrapText,
-    formatBoard
+    formatBoard,
+    formatStatusTable
 };
