@@ -3,54 +3,40 @@ const Task2 = require("../../models/task2.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("my-progress")
-        .setDescription("View your task progress and certificate eligibility"),
+        .setName("myprogress")
+        .setDescription("View your task progress"),
 
     async execute(interaction) {
-
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64  });
 
         const userId = interaction.user.id;
+        const CHANNEL_TEAMS = {
+            "1448189002057257093": "graphic",
+            "1448189025491091597": "dev",
+        };
 
-        // TEAM DETECTION
-        let team = null;
-        if (interaction.channelId === "1448189002057257093") team = "graphic";
-        else if (interaction.channelId === "1448189025491091597") team = "dev";
-        else return interaction.editReply("❌ Use this in a graphics or dev task channel.");
+        const team = CHANNEL_TEAMS[interaction.channelId];
+        if (!team) return interaction.editReply("❌ Use in team task channel.");
 
-        // GET ALL TEAM TASKS
         const tasks = await Task2.find({ team });
-
         const totalTasks = tasks.length;
-
         const claimed = tasks.filter(t => t.assignedTo.includes(userId));
-        const finished = tasks.filter(t => t.finishedBy.includes(userId));
-
-        // GRAPHIC ONLY: count utilised designs
-        let utilised = 0;
-        if (team === "graphic") {
-            utilised = tasks.filter(t => t.selected === userId).length;
-        }
-
-        // BUILD PROGRESS BAR (GRAPHIC ONLY)
-        const stars = "⭐".repeat(utilised) + "☆".repeat(5 - utilised);
-        const bar = `${stars} (${utilised}/5)`;
+        const completed = tasks.filter(t => t.status === "completed" && t.assignedTo.includes(userId));
 
         const embed = new EmbedBuilder()
             .setTitle(`📊 Your Progress (${team} team)`)
             .addFields(
-                { name: "📝 Total Tasks Given", value: String(totalTasks), inline: true },
-                { name: "🎨 Tasks You Claimed", value: String(claimed.length), inline: true },
-                { name: "✅ Tasks You Finished", value: String(finished.length), inline: true },
+                { name: "📝 Total Tasks", value: String(totalTasks), inline: true },
+                { name: "🎨 Claimed", value: String(claimed.length), inline: true },
+                { name: "✅ Completed", value: String(completed.length), inline: true },
             )
             .setColor(team === "graphic" ? "Purple" : "Blue");
 
-        // GRAPHIC EXCLUSIVE SECTION
+        // Graphic certificate progress
         if (team === "graphic") {
-            embed.addFields(
-                { name: "🏆 Utilised Designs", value: `${utilised}`, inline: true },
-                { name: "📜 Certificate Progress", value: bar }
-            );
+            const utilised = tasks.filter(t => t.selected === userId).length;
+            const stars = "⭐".repeat(utilised) + "☆".repeat(5 - utilised);
+            embed.addFields({ name: "🏆 Certificate Progress", value: `${stars} (${utilised}/5)` });
         }
 
         return interaction.editReply({ embeds: [embed] });
