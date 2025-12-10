@@ -3,50 +3,44 @@ const Task2 = require("../../models/task2.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("mytasks2")
-        .setDescription("View your claimed, finished, and unclaimed tasks"),
+        .setName("mytask")
+        .setDescription("View your claimed tasks"),
 
     async execute(interaction) {
+        await interaction.deferReply({ flags: 64  });
 
-        await interaction.deferReply({ ephemeral: true });
+        const CHANNEL_TEAMS = {
+            "1448189002057257093": "graphic",
+            "1448189025491091597": "dev",
+        };
 
-        // TEAM CHECK
-        let team = null;
-        if (interaction.channelId === "1448189002057257093") team = "graphic";
-        else if (interaction.channelId === "1448189025491091597") team = "dev";
-        else return interaction.editReply("❌ Use inside a graphics or dev task channel.");
+        const team = CHANNEL_TEAMS[interaction.channelId];
+        if (!team) return interaction.editReply("❌ Use in team task channel.");
 
         const userId = interaction.user.id;
-
         const tasks = await Task2.find({ team });
 
-        const finished = tasks.filter(t => t.finishedBy.includes(userId));
+        const claimed = tasks.filter(t => 
+            t.assignedTo.includes(userId) && t.status !== "completed"
+        );
 
-const claimed = tasks.filter(t => 
-    t.assignedTo.includes(userId) &&
-    !t.finishedBy.includes(userId)
-);
-        const unclaimed = tasks.filter(t => !t.assignedTo.includes(userId));
+        const completed = tasks.filter(t => 
+            t.assignedTo.includes(userId) && t.status === "completed"
+        );
 
         const embed = new EmbedBuilder()
             .setTitle(`📌 Your Tasks (${team} team)`)
             .addFields(
                 {
-                    name: "🎨 Claimed Tasks",
+                    name: "🔄 Active Tasks",
                     value: claimed.length
                         ? claimed.map(t => `• **${t.taskId}** ${t.title}`).join("\n")
                         : "None"
                 },
                 {
-                    name: "✅ Finished Tasks",
-                    value: finished.length
-                        ? finished.map(t => `• **${t.taskId}** ${t.title}`).join("\n")
-                        : "None"
-                },
-                {
-                    name: "📂 Tasks You Haven't Claimed",
-                    value: unclaimed.length
-                        ? unclaimed.map(t => `• **${t.taskId}** ${t.title}`).join("\n")
+                    name: "✅ Completed Tasks",
+                    value: completed.length
+                        ? completed.map(t => `• **${t.taskId}** ${t.title}`).join("\n")
                         : "None"
                 }
             )
