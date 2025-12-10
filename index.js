@@ -22,7 +22,4 @@ loadCommands(client);        // loads slash commands
 reputationSystem(client);    // attach message handler
 certificateSystem(client);   // attach cert button logic
 
-process.on('unhandledRejection', error => {console.log('❌ Error (but bot keeps running):', error);});
-process.on('uncaughtException', error => {console.log('❌ Big error (but bot keeps running):', error);});
-
 client.login(process.env.TOKEN);
