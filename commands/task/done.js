@@ -1,94 +1,48 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const TaskBoard = require('../../models/task.js');
-const { formatBoard } = require('../../utils/formatter.js');
+const { SlashCommandBuilder } = require("discord.js");
+const Task2 = require("../../models/task2.js");
+const { updateTaskDisplay } = require("../../utils/taskDisplay.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('done')
-        .setDescription('Mark a task as completed (Moderators only)')
-        .addStringOption(option =>
-            option
-                .setName('boardid')
-                .setDescription('Board ID (e.g., DEV12 or GFX3)')
-                .setRequired(true)
+        .setName("done")
+        .setDescription("Mark a task as completed (Mods only)")
+        .addStringOption(o =>
+            o.setName("taskid")
+             .setDescription("Task ID to complete")
+             .setRequired(true)
         )
-        .addIntegerOption(option =>
-            option
-                .setName('tasknumber')
-                .setDescription('Task number to mark as done')
-                .setRequired(true)
-                .setMinValue(1)
+        .addUserOption(o =>
+            o.setName("selected")
+             .setDescription("Select designer whose work is chosen (graphic only)")
+             .setRequired(false)
         ),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64  });
 
-        const boardId = interaction.options.getString('boardid').toUpperCase();
-        const taskNumber = interaction.options.getInteger('tasknumber');
+        const taskId = interaction.options.getString("taskid");
+        const selectedUser = interaction.options.getUser("selected");
+        const task = await Task2.findOne({ taskId });
 
-        // Find the board
-        const board = await TaskBoard.findOne({ boardId });
-        
-        if (!board) {
-            return interaction.editReply({
-                content: `⚠️ Board **${boardId}** not found.`
-            });
-        }
+        if (!task) return interaction.editReply("❌ Task not found.");
 
-        // Check if task exists
-        if (taskNumber > board.tasks.length) {
-            return interaction.editReply({
-                content: `⚠️ Task **${taskNumber}** doesn't exist on board **${boardId}**. This board has only ${board.tasks.length} tasks.`
-            });
-        }
+        const CHANNEL_TEAMS = {
+            "1448189002057257093": "graphic",
+            "1448189025491091597": "dev",
+        };
 
-        const task = board.tasks[taskNumber - 1];
+        const team = CHANNEL_TEAMS[interaction.channelId];
+        if (!team) return interaction.editReply("❌ Use in team task channel.");
 
-        // Check if task is already completed
-        if (task.status === 'Completed') {
-            return interaction.editReply({
-                content: `⚠️ Task **${taskNumber}** is already marked as **Completed**.`
-            });
-        }
+        task.status = "completed";
+        if (team === "graphic" && selectedUser) task.selected = selectedUser.id;
+        await task.save();
 
-        // Update task status
-        const previousStatus = task.status;
-        const previousClaimer = task.claimerName || 'Unknown';
-        
-        task.status = 'Completed';
-        task.completedAt = new Date();
-        task.completedBy = interaction.user.id;
-        task.completerName = interaction.user.username;
-        task.actualWorker = task.claimedBy;
-
-        await board.save();
-
-        // Update the embed message
-        const updatedEmbed = new EmbedBuilder()
-            .setTitle(`${board.team === 'dev' ? 'Developer' : 'Graphic'} Taskboard`)
-            .setColor('Gold') // Changed color to indicate completed status
-            .setDescription(
-                `**Board ID:** ${board.boardId}\n\n` +
-                formatBoard(board.tasks, board.team, board.boardId)
-            )
-            .setFooter({ 
-                text: `Task ${taskNumber} marked completed by ${interaction.user.username}'}` 
-            });
-
-        try {
-            const channel = await interaction.client.channels.fetch(board.channelId);
-            const msg = await channel.messages.fetch(board.messageId);
-            await msg.edit({ embeds: [updatedEmbed] });
-
-            await interaction.editReply({
-                content: `✅ Successfully marked **Task ${taskNumber}** on board **${boardId}** as **Completed**!`
-            });
-
-        } catch (err) {
-            console.error(err);
-            await interaction.editReply({
-                content: `✅ Task marked as completed in database, but couldn't update the message. Error: ${err.message}`
-            });
-        }
+        await updateTaskDisplay(interaction.channel, team);
+        return interaction.editReply(
+            `✅ **${taskId}** marked as completed.\n${
+                selectedUser ? `⭐ Selected: <@${selectedUser.id}>` : ""
+            }`
+        );
     }
 };
