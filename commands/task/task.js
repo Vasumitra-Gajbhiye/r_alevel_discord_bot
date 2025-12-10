@@ -1,105 +1,108 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { formatBoard } = require('../../utils/formatter.js');
-const TaskBoard = require('../../models/task.js');
+const { SlashCommandBuilder } = require('discord.js');
+const Task2 = require('../../models/task2.js');
+const { updateTaskDisplay } = require('../../utils/taskDisplay.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('task')
-        .setDescription('Create a taskboard with multiple tasks')
+        .setDescription('Create multiple tasks at once')
         .addStringOption(option =>
             option
-                .setName('for')
-                .setDescription('Select team')
-                .setRequired(true)
-                .addChoices(
-                    { name: 'Developer', value: 'dev' },
-                    { name: 'Graphic Designer', value: 'graphic' }
-                )
-        )
-        .addStringOption(option =>
-            option
-                .setName('description')
-                .setDescription('Write tasks like: 1. First Task 2. Second Task 3. Third Task')
+                .setName('tasks')
+                .setDescription('Format: 1. Title: Description 2. Title: Description')
                 .setRequired(true)
         )
         .addStringOption(option =>
             option
                 .setName('deadline')
-                .setDescription('Format: dd/mm/yyyy. Deadline for Graphic team.')
+                .setDescription('Format: dd/mm/yyyy. Applies to all tasks.')
                 .setRequired(false)
         ),
 
-
     async execute(interaction) {
+        await interaction.deferReply({ flags: 64 });
 
-        await interaction.deferReply({ ephemeral: true });  
+        const CHANNEL_TEAMS = {
+            "1448189002057257093": "graphic",
+            "1448189025491091597": "dev",
+        };
 
-        const team = interaction.options.getString('for');
-        const description = interaction.options.getString('description');
+        const team = CHANNEL_TEAMS[interaction.channelId];
+        if (!team) return interaction.editReply("❌ Use in team task channel.");
+
+        const taskInput = interaction.options.getString('tasks');
         const deadline = interaction.options.getString('deadline');
 
-        // Extract tasks formatted like "1. Task A 2. Task B 3. Task C"
-        const matches = description.match(/\d+\s*[\.\-\)]\s*[^0-9]+(?=\d+\s*[\.\-\)]|$)/g) || [];
+        // Parse tasks with format: "1. Title: Description 2. Title: Description"
+        // Support: "1. Title:Desc" and "1. Title: Desc" and "1. Title" (no description)
+        const matches = taskInput.match(/\d+\s*[\.\-\)]\s*[^0-9]+(?=\d+\s*[\.\-\)]|$)/g) || [];
 
         if (matches.length === 0) {
-            return interaction.reply({
-                content: "❌ Please format tasks like: `1. First Task 2. Second Task 3. Third Task`",
-                ephemeral: true
+            return interaction.editReply({
+                content: "❌ Please format tasks like: `1. First Task 2. Second Task` or `1. Title: Description 2. Title: Description`"
             });
         }
 
-        // Generate board ID like DEV1, GFX3, etc.
-        const prefix = team === 'dev' ? 'DEV' : 'GFX';
-        const existingCount = await TaskBoard.countDocuments({ team });
-        const boardId = `${prefix}${existingCount + 1}`;
-
-        // Create board object
         const tasks = [];
-
-        for (let i = 0; i < matches.length; i++) {
-            const cleaned = matches[i]
-                .replace(/^\d+\s*[\.\-\)]\s*/, "")
-                .trim();
-
-            tasks.push({
-                number: i + 1,
-                description: cleaned,
-                status: team === 'dev' ? 'Unclaimed' : undefined,
-                deadline: team === 'graphic' ? (deadline || 'None') : undefined
-            });
+        for (const match of matches) {
+            const content = match.replace(/^\d+\s*[\.\-\)]\s*/, "").trim();
+            
+            // Split by first colon to get title and description
+            const colonIndex = content.indexOf(':');
+            let title, description;
+            
+            if (colonIndex !== -1) {
+                title = content.substring(0, colonIndex).trim();
+                description = content.substring(colonIndex + 1).trim();
+            } else {
+                title = content;
+                description = title; // Use title as description if no colon
+            }
+            
+            tasks.push({ title, description });
         }
 
-        // Save board in database
-        const board = await TaskBoard.create({
-            boardId,
-            team,
-            channelId: interaction.channel.id,
-            messageId: null,
-            tasks
-        });
+        // Get latest task ID
+        const latest = await Task2.findOne().sort({ createdAt: -1 });
+        let nextNumber = 1;
+        if (latest && latest.taskId) {
+            const match = latest.taskId.match(/tsk-(\d+)/);
+            if (match) nextNumber = parseInt(match[1]) + 1;
+        }
 
-        // Format board 
-        const embed = new EmbedBuilder()
-            .setTitle(`${team === 'dev' ? 'Developer' : 'Graphic'} Taskboard`)
-            .setColor('Blue')
-            .setDescription(
-                `**Board ID:** ${boardId}\n\n` +
-                formatBoard(tasks, team)
-            );
+        const createdTasks = [];
+        
+        // Create tasks
+        for (let i = 0; i < tasks.length; i++) {
+            const { title, description } = tasks[i];
+            const taskId = `tsk-${String(nextNumber + i).padStart(3, '0')}`;
+            
+            await Task2.create({
+                taskId,
+                team,
+                title,
+                description,
+                deadline: deadline || null,
+                channelId: interaction.channel.id,
+                status: 'open',
+                createdBy: interaction.user.id 
+            });
+            
+            createdTasks.push({ taskId, title });
+        }
 
-        // Send taskboard visibly in the channel
-        const sent = await interaction.channel.send({ embeds: [embed] });
+        // Update display (shows only titles)
+        await updateTaskDisplay(interaction.channel, team);
 
-        // Save message ID
-        board.messageId = sent.id;
-        await board.save();
-         
         await interaction.editReply({
-            content: `✅ Taskboard created successfully!`
+            content: `✅ Created ${createdTasks.length} tasks!\n` +
+                     createdTasks.map(t => `• **${t.taskId}** - ${t.title}`).join('\n') +
+                     (deadline ? `\n📅 Deadline: ${deadline}` : '')
         });
-
     }
 };
+
+
 
 
 
