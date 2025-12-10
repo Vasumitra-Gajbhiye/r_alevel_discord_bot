@@ -11,10 +11,12 @@ module.exports = {
 
         const userId = interaction.user.id;
         
+        const CHANNEL_TEAMS = {
+            [process.env.GRAPHIC_CHANNEL_ID]: "graphic",
+        };
         // CHECK IF IN GRAPHICS CHANNEL
-        if (interaction.channelId !== "1448189002057257093") {
-            return interaction.editReply("❌ This command is for graphics team only.");
-        }
+        const team = CHANNEL_TEAMS[interaction.channelId];
+        if (!team) return interaction.editReply("❌ This command is for graphics team only.");
 
         const tasks = await Task2.find({ team: "graphic" });
         
