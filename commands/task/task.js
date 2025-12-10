@@ -23,8 +23,8 @@ module.exports = {
         await interaction.deferReply({ flags: 64 });
 
         const CHANNEL_TEAMS = {
-            "1448189002057257093": "graphic",
-            "1448189025491091597": "dev",
+            [process.env.GRAPHIC_CHANNEL_ID]: "graphic",
+            [process.env.DEV_CHANNEL_ID]: "dev",
         };
 
         const team = CHANNEL_TEAMS[interaction.channelId];
@@ -101,6 +101,7 @@ module.exports = {
         });
     }
 };
+
 
 
 
