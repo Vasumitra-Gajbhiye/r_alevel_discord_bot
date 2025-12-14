@@ -6,6 +6,7 @@ const reputationSystem = require("./systems/reputation.js");
 const certificateSystem = require("./systems/certificates.js");
 const stickySystem = require("./systems/sticky")
 const qotdSystem = require("./systems/qotd");
+const welcomeSystem = require("./systems/welcome");
 
 // Connect DB
 connectDB();
@@ -25,5 +26,7 @@ reputationSystem(client);    // attach message handler
 certificateSystem(client);   // attach cert button logic
 stickySystem(client);
 qotdSystem(client);
+welcomeSystem(client);
+
 
 client.login(process.env.TOKEN);
