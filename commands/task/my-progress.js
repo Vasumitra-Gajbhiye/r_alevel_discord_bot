@@ -1,77 +1,56 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const Task2 = require("../../models/task2.js");
+const Task = require("../../models/task.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("myprogress")
-        .setDescription("View your graphic design progress and certificate status"),
+        .setName("my-progress")
+        .setDescription("View your task progress and certificate eligibility"),
 
     async execute(interaction) {
-        await interaction.deferReply({ flags: 64 });
+
+        await interaction.deferReply({ ephemeral: true });
 
         const userId = interaction.user.id;
-        
-        // CHECK IF IN GRAPHICS CHANNEL
-        if (interaction.channelId !== "1448189002057257093") {
-            return interaction.editReply("❌ This command is for graphics team only.");
+
+        // TEAM DETECTION
+        let team = null;
+        if (interaction.channelId === process.env.GRAPHIC_CHANNEL) team = "graphic";
+        else if (interaction.channelId === process.env.DEV_CHANNEL) team = "dev";
+        else return interaction.editReply("❌ Use this in a graphics or dev task channel.");
+
+        // GET ALL TEAM TASKS
+        const tasks = await Task.find({ team });
+
+        const totalTasks = tasks.length;
+
+        const claimed = tasks.filter(t => t.assignedTo.includes(userId));
+        const finished = tasks.filter(t => t.finishedBy.includes(userId));
+
+        // GRAPHIC ONLY: count utilised designs
+        let utilised = 0;
+        if (team === "graphic") {
+            utilised = tasks.filter(t => t.selected === userId).length;
         }
 
-        const tasks = await Task2.find({ team: "graphic" });
-        
-        // INDIVIDUAL STATS
-        const myClaimedTasks = tasks.filter(t => t.assignedTo.includes(userId));
-        const myFinishedTasks = tasks.filter(t => t.finishedBy.includes(userId));
-        const mySelectedTasks = tasks.filter(t => t.selected === userId);
-
-        // Calculate certificate progress (5 finished designs = certificate)
-        const certificateProgress = Math.min(myFinishedTasks.length, 5);
-        const stars = "⭐".repeat(certificateProgress) + "☆".repeat(5 - certificateProgress);
+        // BUILD PROGRESS BAR (GRAPHIC ONLY)
+        const stars = "⭐".repeat(utilised) + "☆".repeat(5 - utilised);
+        const bar = `${stars} (${utilised}/5)`;
 
         const embed = new EmbedBuilder()
-            .setTitle(`🎨 Your Graphic Design Progress`)
-            .setColor("Purple")
-            .setDescription(
-                `**Designer: <@${userId}>**\n` +
-                `Keep submitting designs to earn your certificate!`
-            )
+            .setTitle(`📊 Your Progress (${team} team)`)
             .addFields(
-                { 
-                    name: "📝 Total Team Tasks", 
-                    value: String(tasks.length), 
-                    inline: true 
-                },
-                { 
-                    name: "🎨 Tasks You Claimed", 
-                    value: String(myClaimedTasks.length), 
-                    inline: true 
-                },
-                { 
-                    name: "✅ Designs You Finished", 
-                    value: String(myFinishedTasks.length), 
-                    inline: true 
-                },
-                { 
-                    name: "🏆 Certificate Progress", 
-                    value: `${stars} (${certificateProgress}/5 finished designs)`,
-                    inline: false 
-                }
+                { name: "📝 Total Tasks Given", value: String(totalTasks), inline: true },
+                { name: "🎨 Tasks You Claimed", value: String(claimed.length), inline: true },
+                { name: "✅ Tasks You Finished", value: String(finished.length), inline: true },
             )
-            .setFooter({ 
-                text: `Submit ${5 - certificateProgress} more designs to earn your certificate!` 
-            });
+            .setColor(team === "graphic" ? "Purple" : "Blue");
 
-        // Show list of finished designs if any
-        if (myFinishedTasks.length > 0) {
-            const finishedList = myFinishedTasks
-                .map(t => `• **${t.taskId}** - ${t.title}`)
-                .join('\n')
-                .substring(0, 500); // Limit length
-            
-            embed.addFields({
-                name: "📋 Your Finished Designs",
-                value: finishedList || "None yet",
-                inline: false
-            });
+        // GRAPHIC EXCLUSIVE SECTION
+        if (team === "graphic") {
+            embed.addFields(
+                { name: "🏆 Utilised Designs", value: `${utilised}`, inline: true },
+                { name: "📜 Certificate Progress", value: bar }
+            );
         }
 
         return interaction.editReply({ embeds: [embed] });

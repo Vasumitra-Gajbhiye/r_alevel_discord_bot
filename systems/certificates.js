@@ -753,92 +753,56 @@ module.exports = function certificateSystem(client) {
     }
   }
 
-  // // --- Send application panel once
-  // client.once(Events.ClientReady, async () => {
-  //   try {
-  //     const channel = await client.channels.fetch(APPLICATION_CHANNEL).catch(() => null);
-  //     if (!channel) {
-  //       console.warn("[certificates] Application channel not found:", APPLICATION_CHANNEL);
-  //       return;
-  //     }
+//   // Fancy Embed Panel in Application Channel
+//   client.once(Events.ClientReady, async () => {
+//     try {
+//       const channel = await client.channels.fetch(APPLICATION_CHANNEL);
+//       if (!channel) return console.error("❌ Application channel missing");
 
-  //     const embed = new EmbedBuilder()
-  //       .setTitle("📜 Apply for a Certificate")
-  //       .setDescription(
-  //         "**How to apply**\nClick the button for the certificate you want to apply for.\n\n" +
-  //         "**Eligibility (examples)**\n• Helper: Senior Helpers only\n• Writer: Have contributed quality articles\n• Resource Contributor: Provided verified resources\n\n" +
-  //         `After submission, moderators will review your application in <#${REVIEW_CHANNEL}>.`
-  //       )
-  //       .setColor("#5865F2")
-  //       .setFooter({ text: "Only one pending application per certificate type is allowed." })
-  //       .setTimestamp();
+//       const embed = new EmbedBuilder()
+//   .setTitle("🧾 Certificate Application")
+//   .setDescription(
+//     "**__How to Apply:__**\n" +
+//     "Click on the relevant application button below.\n\n" +
 
-  //     const row = new ActionRowBuilder().addComponents(
-  //       new ButtonBuilder().setCustomId("apply_helper").setLabel("Apply — Helper").setStyle(ButtonStyle.Primary),
-  //       new ButtonBuilder().setCustomId("apply_writer").setLabel("Apply — Writer").setStyle(ButtonStyle.Success),
-  //       new ButtonBuilder().setCustomId("apply_resource").setLabel("Apply — Resource Contributor").setStyle(ButtonStyle.Secondary)
-  //     );
+//     "**__Eligibility & Availability:__**\n" +
+//     "**Helper Certification**\n" +
+//     "• Maintain your Helper position for a minimum of 1 month, reach 100 Reputation, and achieve the rank of <@&1437727634711777450>.\n\n" +
 
-  //     // Send panel (do not send duplicates ideally — you may want to dedupe by searching bot messages)
-  //     await channel.send({ embeds: [embed], components: [row] });
-  //     console.log("✅ Certificate application panel sent.");
-  //   } catch (err) {
-  //     console.error("[certificates] Error sending application panel:", err);
-  //   }
-  // });
+//     "**Writer Certification**\n" +
+//     "• Submit a minimum of 5 extensive and helpful blogs/pieces-of-writing to our website.\n\n" +
 
-  // Fancy Embed Panel in Application Channel
-  client.once(Events.ClientReady, async () => {
-    console.log("Guilds this bot is in:");
-client.guilds.cache.forEach(g => console.log("- ", g.name, g.id));
-    try {
-      const channel = await client.channels.fetch(APPLICATION_CHANNEL);
-      if (!channel) return console.error("❌ Application channel missing");
+//     "**Resource Contributor Certification**\n" +
+//     "• Submit a minimum of 5 informative documents or notes relevant to a subject(s).\n\n" +
 
-      const embed = new EmbedBuilder()
-  .setTitle("🧾 Certificate Application")
-  .setDescription(
-    "**__How to Apply:__**\n" +
-    "Click on the relevant application button below.\n\n" +
+//     "**Graphic Designer Certification**\n" +
+//     "• Submit a minimum of 5 pieces of graphic design (must have been utilized) as a <@&1431092954100928583>.\n\n" +
 
-    "**__Eligibility & Availability:__**\n" +
-    "**Helper Certification**\n" +
-    "• Maintain your Helper position for a minimum of 1 month, reach 100 Reputation, and achieve the rank of <@&1437727634711777450>.\n\n" +
+//     "**Moderator Certification**\n" +
+//     "• Achieve the rank of <@&1114447390724849725>.\n"  +
+//     "• Eligible Moderators can directly ping <@&1114451108811767928> to apply\n\n" +
 
-    "**Writer Certification**\n" +
-    "• Submit a minimum of 5 extensive and helpful blogs/pieces-of-writing to our website.\n\n" +
-
-    "**Resource Contributor Certification**\n" +
-    "• Submit a minimum of 5 informative documents or notes relevant to a subject(s).\n\n" +
-
-    "**Graphic Designer Certification**\n" +
-    "• Submit a minimum of 5 pieces of graphic design (must have been utilized) as a <@&1431092954100928583>.\n\n" +
-
-    "**Moderator Certification**\n" +
-    "• Achieve the rank of <@&1114447390724849725>.\n"  +
-    "• Eligible Moderators can directly ping <@&1114451108811767928> to apply\n\n" +
-
-    "Please ensure you meet the requirements before applying.\n" + 
+//     "Please ensure you meet the requirements before applying.\n" + 
     
-    "If your DMs are closed, you'll receive updates in <#1444615091780583526> channel"
-  )
-  .setColor("#2CDAF2")
-  .setFooter({ text: "Only one pending application per certificate is permitted. " })
-  .setTimestamp();
+//     "If your DMs are closed, you'll receive updates in <#1444615091780583526> channel"
+//   )
+//   .setColor("#2CDAF2")
+//   .setFooter({ text: "Only one pending application per certificate is permitted. " })
+//   .setTimestamp();
 
-     const row = new ActionRowBuilder().addComponents(
-  new ButtonBuilder().setCustomId("apply_helper").setLabel("Apply — Helper").setStyle(ButtonStyle.Primary),  // blurple
-  new ButtonBuilder().setCustomId("apply_writer").setLabel("Apply — Writer").setStyle(ButtonStyle.Primary), // gray
-  new ButtonBuilder().setCustomId("apply_resource").setLabel("Apply — Resource").setStyle(ButtonStyle.Primary),  // red (stands out for resources)
-  new ButtonBuilder().setCustomId("apply_graphic").setLabel("Apply — Graphic").setStyle(ButtonStyle.Primary),   // green
-);
+//      const row = new ActionRowBuilder().addComponents(
+//   new ButtonBuilder().setCustomId("apply_helper").setLabel("Apply — Helper").setStyle(ButtonStyle.Primary),  // blurple
+//   new ButtonBuilder().setCustomId("apply_writer").setLabel("Apply — Writer").setStyle(ButtonStyle.Primary), // gray
+//   new ButtonBuilder().setCustomId("apply_resource").setLabel("Apply — Resource").setStyle(ButtonStyle.Primary),  // red (stands out for resources)
+//   new ButtonBuilder().setCustomId("apply_graphic").setLabel("Apply — Graphic").setStyle(ButtonStyle.Primary),   // green
+// );
 
-      await channel.send({ embeds: [embed], components: [row] });
-      console.log("✅ Certificate application panel sent.");
-    } catch (err) {
-      console.error("❌ Panel send error:", err);
-    }
-  });
+//       await channel.send({ embeds: [embed], components: [row] });
+//       console.log("✅ Certificate application panel sent.");
+//     } catch (err) {
+//       console.error("❌ Panel send error:", err);
+//     }
+//   });
   
 
   // Single InteractionCreate handler for all certificate interactions (keeps things tidy)
@@ -1252,49 +1216,7 @@ client.guilds.cache.forEach(g => console.log("- ", g.name, g.id));
         }
       }
 
-      // ---------------------------
-      // cert_details button (if you kept a button in DM earlier) — open a modal for user details
-      // NOTE: you said you prefer email + /submit-cert-details; still keep this for convenience.
-      // ---------------------------
-      // if (customId.startsWith("cert_details:")) {
-      //   // customId = cert_details:<appId>
-      //   const appId = customId.split(":")[1];
-      //   const app = await Certificate.findById(appId);
-      //   if (!app) return interaction.reply({ ephemeral: true, content: "❌ Application not found." });
 
-      //   if (app.status !== "approved") {
-      //     return interaction.reply({ ephemeral: true, content: "❌ Details may only be submitted for an approved application." });
-      //   }
-      //   if (app.status == "details_submitted") {
-      //     return interaction.reply({ ephemeral: true, content: "⚠️ Details already submitted for this application." });
-      //   }
-
-      //   // show modal to user (no defers)
-      //   const modal = new ModalBuilder()
-      //     .setCustomId(`cert_details_modal:${appId}`)
-      //     .setTitle("Submit Certificate Details");
-
-      //   const nameInput = new TextInputBuilder()
-      //     .setCustomId("legal_name")
-      //     .setLabel("Full legal name (as should appear on cert)")
-      //     .setStyle(TextInputStyle.Short)
-      //     .setRequired(true);
-
-      //   const emailInput = new TextInputBuilder()
-      //     .setCustomId("email")
-      //     .setLabel("Email address")
-      //     .setStyle(TextInputStyle.Short)
-      //     .setRequired(true);
-
-      //   modal.addComponents(
-      //     new ActionRowBuilder().addComponents(nameInput),
-      //     new ActionRowBuilder().addComponents(emailInput)
-      //   );
-
-      //   return interaction.showModal(modal);
-      // }
-
-      // If none of above, ignore
       return;
     } catch (err) {
       console.error("[certificates] Interaction handler error:", err);
@@ -1309,62 +1231,4 @@ client.guilds.cache.forEach(g => console.log("- ", g.name, g.id));
     }
   });
 
-  // Modal submit handler for cert_details_modal (user-submitted details via modal)
-  // client.on(Events.InteractionCreate, async (interaction) => {
-  //   try {
-  //     if (interaction.type !== InteractionType.ModalSubmit) return;
-  //     const cid = interaction.customId || "";
-
-  //     // details modal: cert_details_modal:<appId>
-  //     if (cid.startsWith("cert_details_modal:")) {
-  //       const appId = cid.split(":")[1];
-  //       const app = await Certificate.findById(appId);
-  //       if (!app) {
-  //         return interaction.reply({ ephemeral: true, content: "❌ Application not found." });
-  //       }
-  //       if (app.status !== "approved") {
-  //         return interaction.reply({ ephemeral: true, content: "❌ You can only submit details for an approved application." });
-  //       }
-  //       if (app.status = "details_submitted") {
-  //         return interaction.reply({ ephemeral: true, content: "⚠️ Details already submitted. If incorrect, email r.alevelserver@gmail.com" });
-  //       }
-
-  //       // collect fields
-  //       const legalName = interaction.fields.getTextInputValue("legal_name");
-  //       const email = interaction.fields.getTextInputValue("email");
-
-  //       app.status = "details_submitted";
-  //       app.legalName = legalName;
-  //       app.email = email;
-  //       app.detailsSubmittedAt = new Date();
-  //       await app.save();
-
-  //       // Notify review channel
-  //       try {
-  //         const reviewCh = await client.channels.fetch(REVIEW_CHANNEL).catch(() => null);
-  //         if (reviewCh) {
-  //           await reviewCh.send({
-  //             content:
-  //               `📥 Details submitted for Application **${app._id}**\n` +
-  //               `👤 ${app.userTag} (${app.userId})\n` +
-  //               `• Name: **${legalName}**\n` +
-  //               `• Email: **${email}**`
-  //           });
-  //         }
-  //       } catch {}
-
-  //       // Reply to user (modal reply)
-  //       return interaction.reply({ ephemeral: true, content: "✅ Details submitted successfully. We'll prepare your certificate." });
-  //     }
-
-  //     // cert_reject_modal is handled in the other handler at top; ensure it still works
-  //   } catch (err) {
-  //     console.error("[certificates] Modal submit error:", err);
-  //     try {
-  //       if (!interaction.replied && !interaction.deferred) {
-  //         await interaction.reply({ ephemeral: true, content: "⚠️ Error handling modal submission." });
-  //       }
-  //     } catch {}
-  //   }
-  // });
 }

@@ -143,11 +143,11 @@ module.exports = {
         // DM user
         try {
             const appealText = appealable
-                ? "You may appeal this ban using the appeal form."
+                ? "You may appeal this ban using the appeal form: https://formcord.app/alevel/ralevel-Appeals-Form"
                 : "This ban is **not appealable**.";
 
             await member.send(
-                `🚫 You have been **banned** from **r/Alevel**.\n` +
+                `🚫 You have been **banned** from **r/Alevel** Discord server.\n` +
                 `Reason: ${reason}\n\n${appealText}`
             );
         } catch {}

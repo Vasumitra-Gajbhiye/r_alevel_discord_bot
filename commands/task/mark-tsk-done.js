@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require("discord.js");
-const Task2 = require("../../models/task2.js");
+const Task = require("../../models/task.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -23,15 +23,15 @@ module.exports = {
         const taskId = interaction.options.getString("taskid");
         const selectedUser = interaction.options.getUser("selected"); // ⭐ user object
 
-        const task = await Task2.findOne({ taskId });
+        const task = await Task.findOne({ taskId });
 
         if (!task)
             return interaction.editReply("❌ Task not found.");
 
         // TEAM DETECTION
         let team = null;
-        if (interaction.channelId === "1448189002057257093") team = "graphic";
-        else if (interaction.channelId === "1448189025491091597") team = "dev";
+        if (interaction.channelId === process.env.GRAPHIC_CHANNEL) team = "graphic";
+        else if (interaction.channelId === process.env.DEV_CHANNEL) team = "dev";
         else return interaction.editReply("❌ Use this inside a team task channel.");
 
         // SET TASK AS COMPLETED

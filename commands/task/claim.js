@@ -1,109 +1,82 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const TaskBoard = require('../../models/task.js');
-const { formatBoard } = require('../../utils/formatter.js');
+const { SlashCommandBuilder } = require("discord.js");
+const Task = require("../../models/task.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('claim')
-        .setDescription('Claim a task from a taskboard')
-        .addStringOption(option =>
-            option
-                .setName('boardid')
-                .setDescription('Board ID (e.g., DEV12 or GFX3)')
-                .setRequired(true)
-        )
-        .addIntegerOption(option =>
-            option
-                .setName('tasknumber')
-                .setDescription('Task number to claim')
-                .setRequired(true)
-                .setMinValue(1)
+        .setName("claim")
+        .setDescription("Claim a task")
+        .addStringOption(o =>
+            o.setName("taskid")
+             .setDescription("Task ID to claim")
+             .setRequired(true)
         ),
 
     async execute(interaction) {
+
         await interaction.deferReply({ ephemeral: true });
 
-        const boardId = interaction.options.getString('boardid').toUpperCase();
-        const taskNumber = interaction.options.getInteger('tasknumber');
         const userId = interaction.user.id;
-        const username = interaction.user.username;
 
-        // Find the board
-        const board = await TaskBoard.findOne({ boardId });
-        
-        if (!board) {
-            return interaction.editReply({
-                content: `⚠️ Board **${boardId}** not found.`
-            });
+        // TEAM DETECTION
+        let team = null;
+
+        if (interaction.channelId === process.env.GRAPHIC_CHANNEL) team = "graphic";
+        else if (interaction.channelId === process.env.DEV_CHANNEL) team = "dev";
+        else return interaction.editReply("❌ This command must be used inside the graphics or dev task channels.");
+
+        const id = interaction.options.getString("taskid");
+        const task = await Task.findOne({ taskId: id });
+
+        if (!task)
+            return interaction.editReply("❌ Task not found.");
+
+        if (task.team !== team)
+            return interaction.editReply("❌ You cannot claim a task from another team.");
+
+        if (task.status === "completed")
+            return interaction.editReply("❌ This task is already completed.");
+
+        // ================================
+        //     GRAPHIC TEAM BEHAVIOR
+        // ================================
+        if (team === "graphic") {
+
+            // allow multiple claimants
+            if (!task.assignedTo.includes(userId)) {
+                task.assignedTo.push(userId);
+            } else {
+                return interaction.editReply(`❌ You already claimed **${task.taskId}**.`);
+            }
+
+            if (task.status === "open") task.status = "claimed";
+
+            await task.save();
+            return interaction.editReply(`✅ You have successfully claimed **${task.taskId}**.`);
         }
 
-        // Check if task exists
-        if (taskNumber > board.tasks.length) {
-            return interaction.editReply({
-                content: `⚠️ Task **${taskNumber}** doesn't exist on board **${boardId}**. This board has only ${board.tasks.length} tasks.`
-            });
-        }
+        // ================================
+        //        DEV TEAM BEHAVIOR
+        // ================================
+        if (team === "dev") {
 
-        const task = board.tasks[taskNumber - 1];
+            // If nobody has claimed yet → assign
+            if (task.assignedTo.length === 0) {
+                task.assignedTo.push(userId);
+                task.status = "claimed";
 
-        // Check if task is already completed
-        if (task.status === 'Completed') {
-            return interaction.editReply({
-                content: `❌ Task **${taskNumber}** is already marked as **Completed**. You cannot claim it.`
-            });
-        }
+                await task.save();
+                return interaction.editReply(`✅ You have claimed **${task.taskId}**.`);
+            }
 
-        // Check if task is already claimed
-        if (task.status === 'Claimed') {
-            return interaction.editReply({
-                content: `❌ Task **${taskNumber}** is already claimed by someone else.`
-            });
-        }
+            // If the same user tries to claim again
+            if (task.assignedTo.includes(userId)) {
+                return interaction.editReply(`❌ You already claimed **${task.taskId}**.`);
+            }
 
-        // Check if user already has a claimed task on this board
-        const userHasClaimed = board.tasks.some(t => 
-            t.status !== 'Completed' && t.claimedBy === userId
-        );
-
-        if (userHasClaimed) {
-            return interaction.editReply({
-                content: `❌ You already have a claimed task on board **${boardId}**. Finish it before claiming another.`
-            });
-        }
-
-        // Update task status
-        task.status = 'Claimed';
-        task.claimedBy = userId;
-        task.claimedAt = new Date();
-        task.claimerName = username;
-
-        await board.save();
-
-        // Update the embed message
-        const updatedEmbed = new EmbedBuilder()
-            .setTitle(`${board.team === 'dev' ? 'Developer' : 'Graphic'} Taskboard`)
-            .setColor('Green') // Changed color to indicate claimed status
-            .setDescription(
-                `**Board ID:** ${board.boardId}\n\n` +
-                formatBoard(board.tasks, board.team, board.boardId)
-            )
-            .setFooter({ text: `Task ${taskNumber} claimed by ${username}` });
-
-        try {
-            const channel = await interaction.client.channels.fetch(board.channelId);
-            const msg = await channel.messages.fetch(board.messageId);
-            await msg.edit({ embeds: [updatedEmbed] });
-
-            await interaction.editReply({
-                content: `✅ Successfully claimed **Task ${taskNumber}** on board **${boardId}**!`
-            });
-
-        } catch (err) {
-            console.error(err);
-            await interaction.editReply({
-                content: `✅ Task claimed in database, but couldn't update the message. Error: ${err.message}`
-            });
+            // If someone else has already claimed it
+            return interaction.editReply(
+                `❌ This task has already been claimed by <@${task.assignedTo[0]}>.`
+            );
         }
     }
-
 };

@@ -1,9 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const Task2 = require("../../models/task2.js");
+const Task2 = require("../../models/task.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("addtask2")
+        .setName("add-task")
         .setDescription("Create a new task")
         .addStringOption(o => 
             o.setName("title")
@@ -57,9 +57,9 @@ module.exports = {
         // TEAM DETECTION BASED ON CHANNEL
         let team = null;
 
-        if (interaction.channelId === "1448189002057257093") {
+        if (interaction.channelId === process.env.GRAPHIC_CHANNEL) {
             team = "graphic";
-        } else if (interaction.channelId === "1448189025491091597") {
+        } else if (interaction.channelId === process.env.DEV_CHANNEL) {
             team = "dev";
         } else {
             return interaction.reply({ 
@@ -96,18 +96,26 @@ module.exports = {
             deadline: deadline || null
         });
 
-        const embed = new EmbedBuilder()
-            .setTitle("📝 New Task Created")
-            .addFields(
-                { name: "Task ID", value: taskId },
-                { name: "Team", value: team },
-                { name: "Title", value: title },
-                { name: "Description", value: description },
-                { name: "Deadline", value: deadline || "None" }
-            )
-            .setColor(team === "graphic" ? "Purple" : "Blue")
-            .setTimestamp();
+    const fields = [
+                        { name: "Task ID", value: taskId },
+                        { name: "Description", value:description },
+                        { name: "Team", value: team },
+                        { name: "Deadline", value: deadline || "None" },
+                        
+                ];
+// GRAPHIC-ONLY FIELDS
+if (team === "graphic") {
+    if (resolution) fields.push({ name: "Resolution", value: resolution });
+    if (fileFormat) fields.push({ name: "File Format", value: fileFormat });
+    if (notes) fields.push({ name: "Notes", value: notes });
+}
 
-        return interaction.reply({ embeds: [embed] });
-    }
+
+            const embed = new EmbedBuilder()
+                .setTitle(`📌 Task Details: ${title}`)
+                .addFields(...fields)
+                .setColor(team === "graphic" ? "Purple" : "Blue");
+
+            return interaction.reply({ embeds: [embed] });
+        }
 };

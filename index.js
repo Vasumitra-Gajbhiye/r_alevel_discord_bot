@@ -4,6 +4,8 @@ const connectDB = require("./database.js");
 const loadCommands = require("./systems/commands.js");
 const reputationSystem = require("./systems/reputation.js");
 const certificateSystem = require("./systems/certificates.js");
+const stickySystem = require("./systems/sticky")
+const qotdSystem = require("./systems/qotd");
 
 // Connect DB
 connectDB();
@@ -21,5 +23,7 @@ const client = new Client({
 loadCommands(client);        // loads slash commands
 reputationSystem(client);    // attach message handler
 certificateSystem(client);   // attach cert button logic
+stickySystem(client);
+qotdSystem(client);
 
 client.login(process.env.TOKEN);
