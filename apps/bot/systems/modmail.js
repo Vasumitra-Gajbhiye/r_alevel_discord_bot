@@ -133,10 +133,131 @@ function attachmentFileName(attachment, index, used) {
   return uniquifyFileName(desired, used);
 }
 
-function isImageAttachment(attachment) {
+function isGifAttachment(attachment) {
+  const type = attachment?.contentType;
+  if (typeof type === "string" && (type === "image/gif" || type.includes("gif"))) {
+    return true;
+  }
+  return /\.gif$/i.test(String(attachment?.name || ""));
+}
+
+function isStaticImageAttachment(attachment) {
+  if (isGifAttachment(attachment)) return false;
   const type = attachment?.contentType;
   if (typeof type === "string" && type.startsWith("image/")) return true;
-  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(String(attachment?.name || ""));
+  return /\.(png|jpe?g|webp|bmp)$/i.test(String(attachment?.name || ""));
+}
+
+function normalizeMediaUrl(url) {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return String(url || "");
+  }
+}
+
+function isGifPickerUrl(url) {
+  if (!url || typeof url !== "string") return false;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    if (/(^|\.)tenor\.com$/.test(host)) return true;
+    if (/(^|\.)giphy\.com$/.test(host)) return true;
+    if (host === "media.tenor.com" || host === "c.tenor.com") return true;
+    if (/\.gif$/i.test(parsed.pathname)) return true;
+    if (
+      /(?:cdn\.discordapp\.com|media\.discordapp\.net|discordapp\.(?:net|com))$/i.test(
+        host
+      ) &&
+      /tenor|giphy|\.gif/i.test(url)
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function isGifSourceEmbed(embed) {
+  if (!embed) return false;
+  const type = String(embed.type || embed.data?.type || "").toLowerCase();
+  if (type === "gifv") return true;
+  const provider = String(
+    embed.provider?.name || embed.data?.provider?.name || ""
+  ).toLowerCase();
+  if (provider === "tenor" || provider === "giphy") return true;
+  const candidate =
+    embed.url ||
+    embed.video?.url ||
+    embed.image?.url ||
+    embed.thumbnail?.url ||
+    "";
+  if (type === "image" && (isGifPickerUrl(candidate) || /\.gif(?:$|\?)/i.test(candidate))) {
+    return true;
+  }
+  if (embed.video && isGifPickerUrl(candidate)) return true;
+  return false;
+}
+
+function gifEmbedMediaUrl(embed) {
+  return (
+    embed?.video?.url ||
+    embed?.video?.proxyURL ||
+    embed?.video?.proxy_url ||
+    embed?.image?.url ||
+    embed?.image?.proxyURL ||
+    embed?.image?.proxy_url ||
+    embed?.thumbnail?.proxyURL ||
+    embed?.thumbnail?.proxy_url ||
+    embed?.thumbnail?.url ||
+    null
+  );
+}
+
+function fileNameForMediaUrl(url, index, used) {
+  let ext = "mp4";
+  try {
+    const pathname = new URL(url).pathname;
+    const match = pathname.match(/\.([a-zA-Z0-9]+)$/);
+    if (match) ext = match[1].toLowerCase();
+    else if (/\.gif/i.test(url)) ext = "gif";
+  } catch {
+    if (/\.gif/i.test(url)) ext = "gif";
+  }
+  if (ext === "gifv") ext = "mp4";
+  return uniquifyFileName(`gif-${index + 1}.${ext}`, used);
+}
+
+function gifPickerUrlsFromMessage(message) {
+  const urls = new Set();
+  for (const embed of message.embeds || []) {
+    if (!isGifSourceEmbed(embed)) continue;
+    if (embed.url) urls.add(normalizeMediaUrl(embed.url));
+    const media = gifEmbedMediaUrl(embed);
+    if (media) urls.add(normalizeMediaUrl(media));
+  }
+  return urls;
+}
+
+function relayTextContent(message) {
+  let text = message.content?.trim() || "";
+  if (!text) return "";
+
+  const gifUrls = gifPickerUrlsFromMessage(message);
+  const found = text.match(/https?:\/\/[^\s<]+/gi) || [];
+  for (const raw of found) {
+    const cleaned = raw.replace(/[),.;]+$/g, "");
+    if (
+      isGifPickerUrl(cleaned) ||
+      gifUrls.has(normalizeMediaUrl(cleaned))
+    ) {
+      text = text.split(raw).join("");
+    }
+  }
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function stripSpoilerPrefix(name) {
@@ -176,6 +297,13 @@ function prepareRelayAttachments(message, { maxBytes } = {}) {
   const nonImageNames = [];
   let firstImageName = null;
   const usedNames = new Set();
+  const usedMediaUrls = new Set();
+
+  function pushFile(file) {
+    const bucket = files.length < MAX_FILES_PER_MESSAGE ? files : extraFiles;
+    bucket.push(file);
+    return bucket;
+  }
 
   for (let i = 0; i < attachments.length; i++) {
     const attachment = attachments[i];
@@ -200,19 +328,36 @@ function prepareRelayAttachments(message, { maxBytes } = {}) {
       name,
       spoiler: Boolean(attachment.spoiler),
     });
-    const bucket = files.length < MAX_FILES_PER_MESSAGE ? files : extraFiles;
-    bucket.push(file);
+    const bucket = pushFile(file);
+    usedMediaUrls.add(normalizeMediaUrl(attachment.url));
 
-    if (isImageAttachment(attachment)) {
+    if (isStaticImageAttachment(attachment)) {
       if (!firstImageName && !attachment.spoiler && bucket === files) {
         const uploadedName = file.name || name;
         if (!/^SPOILER_/i.test(uploadedName)) {
           firstImageName = uploadedName;
         }
       }
-    } else {
+    } else if (!isGifAttachment(attachment)) {
       nonImageNames.push(displayName);
     }
+  }
+
+  const gifEmbeds = (message.embeds || []).filter(isGifSourceEmbed);
+  for (let i = 0; i < gifEmbeds.length; i++) {
+    const embed = gifEmbeds[i];
+    const url = gifEmbedMediaUrl(embed);
+    const displayName = `gif-${i + 1}`;
+    if (!url) {
+      failed.push({ name: displayName, reason: "unavailable" });
+      continue;
+    }
+    if (usedMediaUrls.has(normalizeMediaUrl(url))) continue;
+
+    const name = fileNameForMediaUrl(url, i, usedNames);
+    const file = new AttachmentBuilder(url, { name });
+    pushFile(file);
+    usedMediaUrls.add(normalizeMediaUrl(url));
   }
 
   return { files, extraFiles, failed, nonImageNames, firstImageName };
@@ -236,7 +381,12 @@ function applyRelayAttachmentFields(embed, { nonImageNames = [], failed = [] } =
 }
 
 function hasRelayableContent(message) {
-  return Boolean(message.content?.trim()) || Boolean(message.attachments?.size);
+  return (
+    Boolean(relayTextContent(message)) ||
+    Boolean(message.content?.trim()) ||
+    Boolean(message.attachments?.size) ||
+    (message.embeds || []).some(isGifSourceEmbed)
+  );
 }
 
 function buildUserRelayEmbed(message, relay = {}) {
@@ -249,8 +399,9 @@ function buildUserRelayEmbed(message, relay = {}) {
     .setFooter({ text: `User ID: ${message.author.id}` })
     .setTimestamp(message.createdAt);
 
-  if (message.content?.trim()) {
-    embed.setDescription(message.content.trim());
+  const description = relayTextContent(message);
+  if (description) {
+    embed.setDescription(description);
   }
 
   if (relay.firstImageName) {
@@ -279,8 +430,9 @@ function buildStaffRelayEmbed(message, relay = {}) {
     .setAuthor({ name: "Staff" })
     .setTimestamp(message.createdAt);
 
-  if (message.content?.trim()) {
-    embed.setDescription(message.content.trim());
+  const description = relayTextContent(message);
+  if (description) {
+    embed.setDescription(description);
   }
 
   if (relay.firstImageName) {
