@@ -75,7 +75,7 @@ module.exports = {
 
     const closeEmbed = new EmbedBuilder()
       .setColor(0xed4245)
-      .setTitle("Ticket Closed")
+      .setTitle("Modmail Closed")
       .setDescription(
         reason
           ? `Your support ticket has been closed.\n\n**Reason:** ${reason}\n\nYou can DM me again anytime if you need to open a new ticket.`
