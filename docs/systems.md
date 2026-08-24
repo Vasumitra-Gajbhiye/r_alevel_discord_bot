@@ -421,7 +421,7 @@ sweepExpiredPolls → close expired polls in parallel (concurrency 5)
 
 1. User DMs the bot with no open ticket → GET SUPPORT message with category dropdown (from guild config)
 2. User picks a category → modal asks them to describe their problem
-3. On submit → create a new forum post (opener embed with user + category, then description message)
+3. On submit → create a new forum post (opener embed with user + category, then description message), and DM the user a confirmation that quotes their explanation
 4. Further user DMs while the ticket is open relay into that post as embeds
 5. Staff replies in the post relay anonymously to the user DM (label: Staff)
 6. Messages starting with `.` stay staff-only (not relayed)

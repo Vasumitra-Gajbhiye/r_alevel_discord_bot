@@ -173,6 +173,23 @@ function buildOpenerEmbed(user, category) {
     .setTimestamp();
 }
 
+function buildTicketOpenedDmEmbed(category, description) {
+  return new EmbedBuilder()
+    .setColor(STAFF_EMBED_COLOR)
+    .setTitle("Ticket opened")
+    .setDescription(
+      "Staff will reply here — please keep this DM open.\n\n" +
+        "**Your message**\n" +
+        description.slice(0, 3900)
+    )
+    .addFields({
+      name: "Category",
+      value: categoryLabel(category).slice(0, 1024),
+      inline: true,
+    })
+    .setTimestamp();
+}
+
 function buildSupportMenuMessage() {
   const boosterRoleId = getBoosterRoleId();
   const boosterText = boosterRoleId
@@ -458,9 +475,19 @@ async function handleModalSubmit(client, interaction) {
     );
 
     await interaction.editReply({
-      content:
-        "Your support ticket has been opened. Staff will reply here — please keep this DM open.",
+      content: "Your support ticket has been opened.",
     });
+
+    try {
+      await interaction.user.send({
+        embeds: [buildTicketOpenedDmEmbed(category, description)],
+      });
+    } catch (dmErr) {
+      console.error(
+        "[modmail] Ticket created but failed to DM confirmation:",
+        dmErr
+      );
+    }
   } catch (err) {
     console.error("[modmail] Failed to create ticket from modal:", err);
     await interaction.editReply({
