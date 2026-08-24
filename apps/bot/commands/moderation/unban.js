@@ -21,6 +21,8 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    await interaction.deferReply();
+
     const userId = interaction.options.getString("userid");
     const reason = interaction.options.getString("reason");
 
@@ -36,9 +38,8 @@ module.exports = {
     try {
       await interaction.guild.members.unban(userId, reason);
     } catch (err) {
-      return interaction.reply({
+      return interaction.editReply({
         content: "❌ That user is not banned or the ID is invalid.",
-        ephemeral: true,
       });
     }
 
@@ -84,6 +85,6 @@ module.exports = {
       )
       .setTimestamp();
 
-    return interaction.reply({ embeds: [embed] });
+    return interaction.editReply({ embeds: [embed] });
   },
 };
