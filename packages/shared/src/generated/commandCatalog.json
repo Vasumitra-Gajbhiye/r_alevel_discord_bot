@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T04:37:44.874Z",
+  "generatedAt": "2026-08-24T04:43:50.325Z",
   "commands": [
     {
       "category": "reputation",
@@ -329,18 +329,6 @@
       "payload": {
         "options": [
           {
-            "name": "user",
-            "description": "User to ban (pick from list, or leave empty and use userid)",
-            "required": false,
-            "type": 6
-          },
-          {
-            "type": 3,
-            "name": "userid",
-            "description": "Discord user ID to ban — use this when they are not in the server",
-            "required": false
-          },
-          {
             "type": 3,
             "name": "reason",
             "description": "Reason for ban",
@@ -375,6 +363,18 @@
             "name": "deletemsgs",
             "description": "Delete past messages from user",
             "required": true
+          },
+          {
+            "name": "user",
+            "description": "User to ban (pick from list, or leave empty and use userid)",
+            "required": false,
+            "type": 6
+          },
+          {
+            "type": 3,
+            "name": "userid",
+            "description": "Discord user ID to ban — use this when they are not in the server",
+            "required": false
           }
         ],
         "name": "ban",

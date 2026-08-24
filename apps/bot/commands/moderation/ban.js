@@ -29,20 +29,6 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("ban")
     .setDescription("Ban a user from the server (works even if they left)")
-    .addUserOption((option) =>
-      option
-        .setName("user")
-        .setDescription("User to ban (pick from list, or leave empty and use userid)")
-        .setRequired(false),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("userid")
-        .setDescription(
-          "Discord user ID to ban — use this when they are not in the server",
-        )
-        .setRequired(false),
-    )
     .addStringOption((option) =>
       option
         .setName("reason")
@@ -66,6 +52,20 @@ module.exports = {
           { name: "Past 7 days", value: "7d" },
         )
         .setRequired(true),
+    )
+    .addUserOption((option) =>
+      option
+        .setName("user")
+        .setDescription("User to ban (pick from list, or leave empty and use userid)")
+        .setRequired(false),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("userid")
+        .setDescription(
+          "Discord user ID to ban — use this when they are not in the server",
+        )
+        .setRequired(false),
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
