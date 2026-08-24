@@ -10,7 +10,7 @@ const {
   TextInputStyle,
 } = require("discord.js");
 const { ModmailTicket, ModmailBan, DEFAULT_MODMAIL_CATEGORIES } = require("@ralevel/db");
-const { tryGetGuildConfig, getRoleId } = require("../utils/guildConfigStore");
+const { tryGetGuildConfig } = require("../utils/guildConfigStore");
 
 const STAFF_EMBED_COLOR = 0x5865f2;
 const USER_EMBED_COLOR = 0x57f287;
@@ -76,10 +76,6 @@ function categoryLabel(category) {
 
 function isValidCategory(category) {
   return getModmailCategories().some((c) => c.value === category);
-}
-
-function getBoosterRoleId() {
-  return getRoleId("booster") || process.env.BOOSTER_ROLE_ID || null;
 }
 
 function threadNameFor(user) {
@@ -191,11 +187,6 @@ function buildTicketOpenedDmEmbed(category, description) {
 }
 
 function buildSupportMenuMessage() {
-  const boosterRoleId = getBoosterRoleId();
-  const boosterText = boosterRoleId
-    ? `<@&${boosterRoleId}>`
-    : "r/alevel Booster";
-
   const embed = new EmbedBuilder()
     .setColor(STAFF_EMBED_COLOR)
     .setTitle("GET SUPPORT")
@@ -203,7 +194,7 @@ function buildSupportMenuMessage() {
       [
         "Please select the most relevant option below to open a Support Ticket!",
         "",
-        `⭐ If you're a ${boosterText}, you'll receive Priority Support!`,
+        "⭐ If you're a booster, you'll receive Priority Support!",
         "",
         "❗ Misuse of this system will result in infractions.",
       ].join("\n")
