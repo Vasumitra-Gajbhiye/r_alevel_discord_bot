@@ -1,6 +1,6 @@
 # Commands
 
-All 72 slash commands in the r/alevel bot. There are **no prefix/text commands** — every user-facing command is a Discord slash command (`/`).
+All 75 slash commands in the r/alevel bot. There are **no prefix/text commands** — every user-facing command is a Discord slash command (`/`).
 
 Commands are loaded at runtime from `commands/` and registered to Discord via `scripts/deploy-commands.js`.
 
@@ -155,6 +155,53 @@ Deletes any existing bot panel messages in that channel and posts a fresh embed 
 | **Discord permissions** | `BanMembers` |
 | **Role access** | admin (+ in-command `ADMIN_ROLE_ID` check) |
 | **Note** | Clears any scheduled forfeit when status advances |
+
+---
+
+## Modmail
+
+### `/ban-user-modmail`
+
+| | |
+|---|---|
+| **File** | `commands/modmail/ban-user-modmail.js` |
+| **Description** | Ban a user from opening modmail tickets (required reason) |
+| **Discord permissions** | `ModerateMembers` |
+| **Role access** | admin, dcHead, srMods, jrMods, trialMods |
+| **Options** | `user` (required), `reason` (required, max 500) |
+| **Dependencies** | `ModmailBan`, `ModmailTicket`, `systems/modmail.js` |
+
+### `/unban-user-modmail`
+
+| | |
+|---|---|
+| **File** | `commands/modmail/unban-user-modmail.js` |
+| **Description** | Remove a user from the modmail blacklist |
+| **Discord permissions** | `ModerateMembers` |
+| **Role access** | admin, dcHead, srMods, jrMods, trialMods |
+| **Options** | `user` (required) |
+| **Dependencies** | `ModmailBan` |
+
+### `/list-modmail-ban`
+
+| | |
+|---|---|
+| **File** | `commands/modmail/list-modmail-ban.js` |
+| **Description** | List users banned from modmail |
+| **Discord permissions** | `ModerateMembers` |
+| **Role access** | admin, dcHead, srMods, jrMods, trialMods |
+| **Dependencies** | `ModmailBan` |
+
+### `/close-ticket`
+
+| | |
+|---|---|
+| **File** | `commands/modmail/close-ticket.js` |
+| **Description** | Close the current modmail forum ticket, DM the user, and archive the post |
+| **Discord permissions** | `ModerateMembers` |
+| **Role access** | admin, dcHead, srMods, jrMods, trialMods |
+| **Options** | `reason` (optional, max 500) |
+| **Dependencies** | `ModmailTicket`, `systems/modmail.js` |
 
 ---
 

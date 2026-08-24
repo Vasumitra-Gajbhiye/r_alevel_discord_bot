@@ -46,7 +46,7 @@ New IDs are generated via `utils/getNextSequenceId.js`, `utils/getNextPollId.js`
 
 ---
 
-## Collections (18 models)
+## Collections (19 models)
 
 ### `users` — User
 
@@ -241,6 +241,21 @@ Audit trail for sticky moderation actions.
 | `bannedBy` | String | Moderator who banned |
 | `reason` | String | Ban reason |
 | `bannedAt` | Date | When banned |
+
+---
+
+### `modmailbans` — ModmailBan
+
+**Model:** `models/modmailBan.js`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `userId` | String | Banned user (unique) |
+| `bannedBy` | String | Staff member who banned |
+| `reason` | String | Required reason shown to the user and in `/list-modmail-ban` |
+| `createdAt` / `updatedAt` | Date | Timestamps |
+
+**Written by:** `/ban-user-modmail`, `/unban-user-modmail`
 
 ---
 

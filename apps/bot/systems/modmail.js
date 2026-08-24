@@ -9,7 +9,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require("discord.js");
-const { ModmailTicket, DEFAULT_MODMAIL_CATEGORIES } = require("@ralevel/db");
+const { ModmailTicket, ModmailBan, DEFAULT_MODMAIL_CATEGORIES } = require("@ralevel/db");
 const { tryGetGuildConfig, getRoleId } = require("../utils/guildConfigStore");
 
 const STAFF_EMBED_COLOR = 0x5865f2;
@@ -259,6 +259,58 @@ async function closeTicketAsSystem(ticket) {
   );
 }
 
+
+function buildBannedFromModmailEmbed(reason, { ticketClosed = false } = {}) {
+  const description = ticketClosed
+    ? `You are banned from using modmail.\n\n**Reason:** ${reason}\n\nYour open support ticket has been closed.`
+    : `You are banned from using modmail.\n\n**Reason:** ${reason}`;
+
+  return new EmbedBuilder()
+    .setColor(0xed4245)
+    .setTitle("Banned from Modmail")
+    .setDescription(description)
+    .setTimestamp();
+}
+
+async function findModmailBan(userId) {
+  return ModmailBan.findOne({ userId }).lean();
+}
+
+/**
+ * Mark a ticket CLOSED and optionally archive its forum thread.
+ * Caller is responsible for any user-facing DM.
+ */
+async function closeOpenTicket(ticket, { closedBy, thread, archiveReason } = {}) {
+  await ModmailTicket.updateOne(
+    { _id: ticket._id },
+    {
+      $set: {
+        status: "CLOSED",
+        closedAt: new Date(),
+        closedBy: closedBy || "system",
+      },
+    }
+  );
+
+  if (!thread) {
+    return { archived: false };
+  }
+
+  try {
+    if (!thread.archived) {
+      await thread.setArchived(
+        true,
+        archiveReason || "Modmail ticket closed"
+      );
+    }
+    return { archived: true };
+  } catch (err) {
+    console.error("[modmail] Failed to archive ticket thread:", err);
+    return { archived: false, archiveError: err };
+  }
+}
+
+
 async function createModmailThread(client, user, category, description) {
   const forumId = getModMailChannelId();
   if (!forumId) {
@@ -342,6 +394,14 @@ async function handleModmailDm(client, message) {
       }
     }
 
+    const ban = await findModmailBan(message.author.id);
+    if (ban) {
+      await message.channel.send({
+        embeds: [buildBannedFromModmailEmbed(ban.reason)],
+      });
+      return;
+    }
+
     // No open ticket — show intake menu (any non-bot DM triggers it)
     await sendSupportMenu(message.channel);
   } catch (err) {
@@ -407,6 +467,14 @@ async function handleCategorySelect(interaction) {
     });
   }
 
+  const ban = await findModmailBan(interaction.user.id);
+  if (ban) {
+    return interaction.reply({
+      embeds: [buildBannedFromModmailEmbed(ban.reason)],
+      ephemeral: true,
+    });
+  }
+
   const existing = await findOpenTicketByUser(interaction.user.id);
   if (existing) {
     return interaction.reply({
@@ -455,6 +523,14 @@ async function handleModalSubmit(client, interaction) {
     });
   }
 
+  const ban = await findModmailBan(interaction.user.id);
+  if (ban) {
+    return interaction.reply({
+      embeds: [buildBannedFromModmailEmbed(ban.reason)],
+      ephemeral: true,
+    });
+  }
+
   const existing = await findOpenTicketByUser(interaction.user.id);
   if (existing) {
     return interaction.reply({
@@ -497,7 +573,7 @@ async function handleModalSubmit(client, interaction) {
   }
 }
 
-module.exports = function modmailSystem(client) {
+function modmailSystem(client) {
   if (!getModMailChannelId()) {
     console.warn(
       "[modmail] Forum channel is not set in guild config (or MOD_MAIL_CHANNEL_ID) — ticket creation will fail until configured."
@@ -546,3 +622,9 @@ module.exports = function modmailSystem(client) {
       handleModmailStaffReply(client, message),
   };
 };
+
+modmailSystem.closeOpenTicket = closeOpenTicket;
+modmailSystem.findOpenTicketByUser = findOpenTicketByUser;
+modmailSystem.buildBannedFromModmailEmbed = buildBannedFromModmailEmbed;
+
+module.exports = modmailSystem;

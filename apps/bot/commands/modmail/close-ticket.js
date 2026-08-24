@@ -5,6 +5,7 @@ const {
   EmbedBuilder,
 } = require("discord.js");
 const { tryGetGuildConfig } = require("../../utils/guildConfigStore");
+const { closeOpenTicket } = require("../../systems/modmail");
 
 function getModMailChannelId() {
   const fromConfig = tryGetGuildConfig()?.modmail?.forumChannelId;
@@ -66,10 +67,11 @@ module.exports = {
 
     await interaction.deferReply({ ephemeral: true });
 
-    ticket.status = "CLOSED";
-    ticket.closedBy = interaction.user.id;
-    ticket.closedAt = new Date();
-    await ticket.save();
+    const { archiveError } = await closeOpenTicket(ticket, {
+      closedBy: interaction.user.id,
+      thread: interaction.channel,
+      archiveReason: `Modmail closed by ${interaction.user.tag}`,
+    });
 
     const closeEmbed = new EmbedBuilder()
       .setColor(0xed4245)
@@ -88,15 +90,7 @@ module.exports = {
       // User may have DMs closed; still close the ticket.
     }
 
-    try {
-      if (!interaction.channel.archived) {
-        await interaction.channel.setArchived(
-          true,
-          `Modmail closed by ${interaction.user.tag}`
-        );
-      }
-    } catch (err) {
-      console.error("[modmail] Failed to archive ticket thread:", err);
+    if (archiveError) {
       await interaction.editReply({
         content:
           "Ticket marked closed, but I couldn't archive this post. Please archive it manually.",

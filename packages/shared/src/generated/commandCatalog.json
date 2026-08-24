@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T03:43:32.839Z",
+  "generatedAt": "2026-08-24T04:08:50.757Z",
   "commands": [
     {
       "category": "reputation",
@@ -380,6 +380,32 @@
         "name": "ban",
         "description": "Ban a user from the server (works even if they left)",
         "default_member_permissions": "4",
+        "type": 1
+      }
+    },
+    {
+      "category": "modmail",
+      "name": "ban-user-modmail",
+      "fileDefault": "ModerateMembers",
+      "payload": {
+        "options": [
+          {
+            "name": "user",
+            "description": "The user to ban from modmail.",
+            "required": true,
+            "type": 6
+          },
+          {
+            "type": 3,
+            "name": "reason",
+            "description": "Reason shown to the user and in the ban list.",
+            "required": true,
+            "max_length": 500
+          }
+        ],
+        "name": "ban-user-modmail",
+        "description": "Ban a user from opening modmail tickets.",
+        "default_member_permissions": "1099511627776",
         "type": 1
       }
     },
@@ -846,6 +872,18 @@
         "name": "list-cert-forfeits",
         "description": "List certificate applications with a scheduled forfeit",
         "default_member_permissions": "4",
+        "type": 1
+      }
+    },
+    {
+      "category": "modmail",
+      "name": "list-modmail-ban",
+      "fileDefault": "ModerateMembers",
+      "payload": {
+        "options": [],
+        "name": "list-modmail-ban",
+        "description": "List users banned from using modmail.",
+        "default_member_permissions": "1099511627776",
         "type": 1
       }
     },
@@ -2077,6 +2115,25 @@
         ],
         "name": "unban",
         "description": "Unban a user by ID",
+        "type": 1
+      }
+    },
+    {
+      "category": "modmail",
+      "name": "unban-user-modmail",
+      "fileDefault": "ModerateMembers",
+      "payload": {
+        "options": [
+          {
+            "name": "user",
+            "description": "The user to unban from modmail.",
+            "required": true,
+            "type": 6
+          }
+        ],
+        "name": "unban-user-modmail",
+        "description": "Allow a user to open modmail tickets again.",
+        "default_member_permissions": "1099511627776",
         "type": 1
       }
     },
