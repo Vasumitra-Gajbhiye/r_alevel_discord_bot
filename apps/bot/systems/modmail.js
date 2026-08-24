@@ -1,5 +1,6 @@
 const {
   ActionRowBuilder,
+  AttachmentBuilder,
   ChannelType,
   EmbedBuilder,
   Events,
@@ -86,16 +87,159 @@ function threadNameFor(user) {
   return `modmail-${raw || user.id}`.slice(0, 100);
 }
 
-function attachmentLines(message) {
-  if (!message.attachments?.size) return [];
-  return [...message.attachments.values()].map((a) => a.url);
+const MAX_FILES_PER_MESSAGE = 10;
+const BASE_UPLOAD_LIMIT = 25 * 1024 * 1024;
+const TIER2_UPLOAD_LIMIT = 50 * 1024 * 1024;
+const TIER3_UPLOAD_LIMIT = 100 * 1024 * 1024;
+
+function safeAttachmentName(attachment, fallbackBase) {
+  const raw = attachment?.name || "";
+  const extMatch = raw.match(/\.([a-zA-Z0-9]+)$/);
+  const ext = extMatch ? extMatch[1].toLowerCase() : "bin";
+  const base =
+    String(fallbackBase || "file")
+      .replace(/[^\w.-]+/g, "_")
+      .replace(/^\.+/, "")
+      .slice(0, 80) || "file";
+  return `${base}.${ext}`;
+}
+
+function uniquifyFileName(desired, used) {
+  const lower = desired.toLowerCase();
+  if (!used.has(lower)) {
+    used.add(lower);
+    return desired;
+  }
+  const dot = desired.lastIndexOf(".");
+  const stem = dot > 0 ? desired.slice(0, dot) : desired;
+  const ext = dot > 0 ? desired.slice(dot) : "";
+  let n = 2;
+  let candidate;
+  do {
+    candidate = `${stem}-${n}${ext}`;
+    n += 1;
+  } while (used.has(candidate.toLowerCase()));
+  used.add(candidate.toLowerCase());
+  return candidate;
+}
+
+function attachmentFileName(attachment, index, used) {
+  const raw = String(attachment?.name || "")
+    .trim()
+    .replace(/[/\\]/g, "_")
+    .replace(/^\.+/, "");
+  const fallback = safeAttachmentName(attachment, `modmail-${index + 1}`);
+  const desired = raw ? raw.slice(0, 200) : fallback;
+  return uniquifyFileName(desired, used);
+}
+
+function isImageAttachment(attachment) {
+  const type = attachment?.contentType;
+  if (typeof type === "string" && type.startsWith("image/")) return true;
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(String(attachment?.name || ""));
+}
+
+function stripSpoilerPrefix(name) {
+  return String(name || "file").replace(/^SPOILER_/i, "");
+}
+
+function uploadLimitFor(destination) {
+  const tier = destination?.guild?.premiumTier ?? 0;
+  if (tier >= 3) return TIER3_UPLOAD_LIMIT;
+  if (tier >= 2) return TIER2_UPLOAD_LIMIT;
+  return BASE_UPLOAD_LIMIT;
+}
+
+function formatNameList(items) {
+  const lines = items.map((item) => `• ${String(item).slice(0, 90)}`);
+  let value = lines.join("\n");
+  if (value.length > 1024) {
+    value = `${value.slice(0, 1021)}...`;
+  }
+  return value;
+}
+
+function fileFailureEntries(files, reason) {
+  return files.map((file) => ({
+    name: stripSpoilerPrefix(file.name || "file"),
+    reason,
+  }));
+}
+
+function prepareRelayAttachments(message, { maxBytes } = {}) {
+  const attachments = message.attachments?.size
+    ? [...message.attachments.values()]
+    : [];
+  const files = [];
+  const extraFiles = [];
+  const failed = [];
+  const nonImageNames = [];
+  let firstImageName = null;
+  const usedNames = new Set();
+
+  for (let i = 0; i < attachments.length; i++) {
+    const attachment = attachments[i];
+    const name = attachmentFileName(attachment, i, usedNames);
+    const displayName = attachment.name || name;
+
+    if (!attachment.url) {
+      failed.push({ name: displayName, reason: "unavailable" });
+      continue;
+    }
+
+    if (
+      typeof maxBytes === "number" &&
+      typeof attachment.size === "number" &&
+      attachment.size > maxBytes
+    ) {
+      failed.push({ name: displayName, reason: "too large" });
+      continue;
+    }
+
+    const file = new AttachmentBuilder(attachment.url, {
+      name,
+      spoiler: Boolean(attachment.spoiler),
+    });
+    const bucket = files.length < MAX_FILES_PER_MESSAGE ? files : extraFiles;
+    bucket.push(file);
+
+    if (isImageAttachment(attachment)) {
+      if (!firstImageName && !attachment.spoiler && bucket === files) {
+        const uploadedName = file.name || name;
+        if (!/^SPOILER_/i.test(uploadedName)) {
+          firstImageName = uploadedName;
+        }
+      }
+    } else {
+      nonImageNames.push(displayName);
+    }
+  }
+
+  return { files, extraFiles, failed, nonImageNames, firstImageName };
+}
+
+function applyRelayAttachmentFields(embed, { nonImageNames = [], failed = [] } = {}) {
+  if (nonImageNames.length) {
+    embed.addFields({
+      name: "Attachments",
+      value: formatNameList(nonImageNames),
+    });
+  }
+  if (failed.length) {
+    embed.addFields({
+      name: "Could not attach",
+      value: formatNameList(
+        failed.map((item) => `${item.name} (${item.reason})`)
+      ),
+    });
+  }
 }
 
 function hasRelayableContent(message) {
   return Boolean(message.content?.trim()) || Boolean(message.attachments?.size);
 }
 
-function buildUserRelayEmbed(message) {
+function buildUserRelayEmbed(message, relay = {}) {
   const embed = new EmbedBuilder()
     .setColor(USER_EMBED_COLOR)
     .setAuthor({
@@ -109,14 +253,11 @@ function buildUserRelayEmbed(message) {
     embed.setDescription(message.content.trim());
   }
 
-  const urls = attachmentLines(message);
-  if (urls.length) {
-    embed.addFields({
-      name: "Attachments",
-      value: urls.map((url) => `[link](${url})`).join("\n").slice(0, 1024),
-    });
+  if (relay.firstImageName) {
+    embed.setImage(`attachment://${relay.firstImageName}`);
   }
 
+  applyRelayAttachmentFields(embed, relay);
   return embed;
 }
 
@@ -132,7 +273,7 @@ function buildDescriptionEmbed(user, description) {
     .setTimestamp();
 }
 
-function buildStaffRelayEmbed(message) {
+function buildStaffRelayEmbed(message, relay = {}) {
   const embed = new EmbedBuilder()
     .setColor(STAFF_EMBED_COLOR)
     .setAuthor({ name: "Staff" })
@@ -142,15 +283,73 @@ function buildStaffRelayEmbed(message) {
     embed.setDescription(message.content.trim());
   }
 
-  const urls = attachmentLines(message);
-  if (urls.length) {
-    embed.addFields({
-      name: "Attachments",
-      value: urls.map((url) => `[link](${url})`).join("\n").slice(0, 1024),
-    });
+  if (relay.firstImageName) {
+    embed.setImage(`attachment://${relay.firstImageName}`);
   }
 
+  applyRelayAttachmentFields(embed, relay);
   return embed;
+}
+
+async function sendRelayedMessage(target, message, buildEmbed) {
+  const prepared = prepareRelayAttachments(message, {
+    maxBytes: uploadLimitFor(target),
+  });
+
+  const sendOnce = async (relay) => {
+    const embed = buildEmbed(message, relay);
+    const payload = { embeds: [embed] };
+    if (relay.files?.length) payload.files = relay.files;
+    await target.send(payload);
+  };
+
+  try {
+    await sendOnce(prepared);
+  } catch (err) {
+    if (!prepared.files.length) throw err;
+    console.error("[modmail] Failed to rehost attachments:", err);
+    await sendOnce({
+      files: [],
+      extraFiles: [],
+      failed: [
+        ...prepared.failed,
+        ...fileFailureEntries(prepared.files, "too large or unavailable"),
+        ...fileFailureEntries(prepared.extraFiles, "too large or unavailable"),
+      ],
+      nonImageNames: [],
+      firstImageName: null,
+    });
+    return;
+  }
+
+  for (let i = 0; i < prepared.extraFiles.length; i += MAX_FILES_PER_MESSAGE) {
+    const batch = prepared.extraFiles.slice(i, i + MAX_FILES_PER_MESSAGE);
+    try {
+      await target.send({ files: batch });
+    } catch (err) {
+      console.error("[modmail] Failed to rehost extra attachments:", err);
+      await target
+        .send({
+          embeds: [
+            new EmbedBuilder().setColor(0xed4245).addFields({
+              name: "Could not attach",
+              value: formatNameList(
+                batch.map(
+                  (file) =>
+                    `${stripSpoilerPrefix(file.name || "file")} (too large or unavailable)`
+                )
+              ),
+            }),
+          ],
+        })
+        .catch((followErr) => {
+          console.error(
+            "[modmail] Failed to report extra attachment error:",
+            followErr
+          );
+        });
+    }
+  }
 }
 
 function buildOpenerEmbed(user, category) {
@@ -380,7 +579,7 @@ async function handleModmailDm(client, message) {
       } else {
         if (!hasRelayableContent(message)) return;
         await ensureThreadWritable(thread);
-        await thread.send({ embeds: [buildUserRelayEmbed(message)] });
+        await sendRelayedMessage(thread, message, buildUserRelayEmbed);
         return;
       }
     }
@@ -436,7 +635,7 @@ async function handleModmailStaffReply(client, message) {
   try {
     await ensureThreadWritable(message.channel);
     const user = await client.users.fetch(openTicket.userId);
-    await user.send({ embeds: [buildStaffRelayEmbed(message)] });
+    await sendRelayedMessage(user, message, buildStaffRelayEmbed);
   } catch (err) {
     console.error("[modmail] Failed to DM user:", err);
     await message.channel
