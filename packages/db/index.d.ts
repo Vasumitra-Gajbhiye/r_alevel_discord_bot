@@ -15,6 +15,7 @@ export declare const Confession: Model<any>;
 export declare const ConfessionBan: Model<any>;
 export declare const ModmailTicket: Model<any>;
 export declare const ModmailBan: Model<any>;
+export declare const ModmailMessageLink: Model<any>;
 export declare const Certificate: Model<any>;
 export declare const CertRotation: Model<any>;
 export declare const QotdRotation: Model<any>;

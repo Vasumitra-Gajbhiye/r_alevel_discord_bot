@@ -10,7 +10,12 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require("discord.js");
-const { ModmailTicket, ModmailBan, DEFAULT_MODMAIL_CATEGORIES } = require("@ralevel/db");
+const {
+  ModmailTicket,
+  ModmailBan,
+  ModmailMessageLink,
+  DEFAULT_MODMAIL_CATEGORIES,
+} = require("@ralevel/db");
 const { tryGetGuildConfig } = require("../utils/guildConfigStore");
 
 const STAFF_EMBED_COLOR = 0x5865f2;
@@ -389,6 +394,69 @@ function hasRelayableContent(message) {
   );
 }
 
+function referencedMessageId(message) {
+  return (
+    message?.reference?.messageId ||
+    message?.reference?.message_id ||
+    null
+  );
+}
+
+function counterpartMessageId(link, fromSide) {
+  if (!link) return null;
+  if (fromSide === "dm") return link.threadMessageId || null;
+  if (fromSide === "thread") return link.dmMessageId || null;
+  return null;
+}
+
+function buildRelayReplyOptions(replyToMessageId) {
+  if (!replyToMessageId) return {};
+  return {
+    reply: {
+      messageReference: replyToMessageId,
+      failIfNotExists: false,
+    },
+    allowedMentions: { repliedUser: false },
+  };
+}
+
+async function saveMessageLink({ threadId, dmMessageId, threadMessageId }) {
+  if (!threadId || !dmMessageId || !threadMessageId) return;
+  try {
+    await ModmailMessageLink.create({
+      threadId,
+      dmMessageId,
+      threadMessageId,
+    });
+  } catch (err) {
+    console.error("[modmail] Failed to save message link:", err);
+  }
+}
+
+async function deleteMessageLinks(threadId) {
+  if (!threadId) return;
+  try {
+    await ModmailMessageLink.deleteMany({ threadId });
+  } catch (err) {
+    console.error("[modmail] Failed to delete message links:", err);
+  }
+}
+
+async function resolveReplyMessageId(referencedId, fromSide) {
+  if (!referencedId) return null;
+  const query =
+    fromSide === "dm"
+      ? { dmMessageId: referencedId }
+      : { threadMessageId: referencedId };
+  try {
+    const link = await ModmailMessageLink.findOne(query).lean();
+    return counterpartMessageId(link, fromSide);
+  } catch (err) {
+    console.error("[modmail] Failed to resolve reply target:", err);
+    return null;
+  }
+}
+
 function buildUserRelayEmbed(message, relay = {}) {
   const embed = new EmbedBuilder()
     .setColor(USER_EMBED_COLOR)
@@ -443,24 +511,33 @@ function buildStaffRelayEmbed(message, relay = {}) {
   return embed;
 }
 
-async function sendRelayedMessage(target, message, buildEmbed) {
+async function sendRelayedMessage(
+  target,
+  message,
+  buildEmbed,
+  { replyToMessageId } = {}
+) {
   const prepared = prepareRelayAttachments(message, {
     maxBytes: uploadLimitFor(target),
   });
 
   const sendOnce = async (relay) => {
     const embed = buildEmbed(message, relay);
-    const payload = { embeds: [embed] };
+    const payload = {
+      embeds: [embed],
+      ...buildRelayReplyOptions(replyToMessageId),
+    };
     if (relay.files?.length) payload.files = relay.files;
-    await target.send(payload);
+    return target.send(payload);
   };
 
+  let sent;
   try {
-    await sendOnce(prepared);
+    sent = await sendOnce(prepared);
   } catch (err) {
     if (!prepared.files.length) throw err;
     console.error("[modmail] Failed to rehost attachments:", err);
-    await sendOnce({
+    sent = await sendOnce({
       files: [],
       extraFiles: [],
       failed: [
@@ -471,7 +548,7 @@ async function sendRelayedMessage(target, message, buildEmbed) {
       nonImageNames: [],
       firstImageName: null,
     });
-    return;
+    return sent;
   }
 
   for (let i = 0; i < prepared.extraFiles.length; i += MAX_FILES_PER_MESSAGE) {
@@ -502,6 +579,8 @@ async function sendRelayedMessage(target, message, buildEmbed) {
         });
     }
   }
+
+  return sent;
 }
 
 function buildOpenerEmbed(user, category) {
@@ -599,6 +678,7 @@ async function closeTicketAsSystem(ticket) {
       },
     }
   );
+  await deleteMessageLinks(ticket.threadId);
 }
 
 
@@ -633,6 +713,7 @@ async function closeOpenTicket(ticket, { closedBy, thread, archiveReason } = {})
       },
     }
   );
+  await deleteMessageLinks(ticket.threadId);
 
   if (!thread) {
     return { archived: false };
@@ -675,7 +756,9 @@ async function createModmailThread(client, user, category, description) {
         reason: `Modmail thread for ${user.tag} (${category})`,
       });
 
-      await thread.send({ embeds: [buildDescriptionEmbed(user, description)] });
+      const descriptionMsg = await thread.send({
+        embeds: [buildDescriptionEmbed(user, description)],
+      });
 
       const ticket = await ModmailTicket.create({
         userId: user.id,
@@ -685,7 +768,7 @@ async function createModmailThread(client, user, category, description) {
         status: "OPEN",
       });
 
-      return { thread, ticket };
+      return { thread, ticket, descriptionMsg };
     } catch (err) {
       // Avoid leaving orphan forum posts if DB insert fails.
       if (thread) {
@@ -731,7 +814,21 @@ async function handleModmailDm(client, message) {
       } else {
         if (!hasRelayableContent(message)) return;
         await ensureThreadWritable(thread);
-        await sendRelayedMessage(thread, message, buildUserRelayEmbed);
+        const replyToMessageId = await resolveReplyMessageId(
+          referencedMessageId(message),
+          "dm"
+        );
+        const sent = await sendRelayedMessage(
+          thread,
+          message,
+          buildUserRelayEmbed,
+          { replyToMessageId }
+        );
+        await saveMessageLink({
+          threadId: thread.id,
+          dmMessageId: message.id,
+          threadMessageId: sent?.id,
+        });
         return;
       }
     }
@@ -787,7 +884,21 @@ async function handleModmailStaffReply(client, message) {
   try {
     await ensureThreadWritable(message.channel);
     const user = await client.users.fetch(openTicket.userId);
-    await sendRelayedMessage(user, message, buildStaffRelayEmbed);
+    const replyToMessageId = await resolveReplyMessageId(
+      referencedMessageId(message),
+      "thread"
+    );
+    const sent = await sendRelayedMessage(
+      user,
+      message,
+      buildStaffRelayEmbed,
+      { replyToMessageId }
+    );
+    await saveMessageLink({
+      threadId: message.channel.id,
+      threadMessageId: message.id,
+      dmMessageId: sent?.id,
+    });
   } catch (err) {
     console.error("[modmail] Failed to DM user:", err);
     await message.channel
@@ -885,7 +996,7 @@ async function handleModalSubmit(client, interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    await createModmailThread(
+    const created = await createModmailThread(
       client,
       interaction.user,
       category,
@@ -897,8 +1008,13 @@ async function handleModalSubmit(client, interaction) {
     });
 
     try {
-      await interaction.user.send({
+      const dmMsg = await interaction.user.send({
         embeds: [buildTicketOpenedDmEmbed(category, description)],
+      });
+      await saveMessageLink({
+        threadId: created.thread.id,
+        threadMessageId: created.descriptionMsg?.id,
+        dmMessageId: dmMsg.id,
       });
     } catch (dmErr) {
       console.error(
@@ -968,5 +1084,9 @@ function modmailSystem(client) {
 modmailSystem.closeOpenTicket = closeOpenTicket;
 modmailSystem.findOpenTicketByUser = findOpenTicketByUser;
 modmailSystem.buildBannedFromModmailEmbed = buildBannedFromModmailEmbed;
+modmailSystem.referencedMessageId = referencedMessageId;
+modmailSystem.counterpartMessageId = counterpartMessageId;
+modmailSystem.buildRelayReplyOptions = buildRelayReplyOptions;
+modmailSystem.resolveReplyMessageId = resolveReplyMessageId;
 
 module.exports = modmailSystem;
